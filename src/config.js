@@ -62,6 +62,15 @@ window.PD = window.PD || {};
     recallNone: '場上還沒有朋友',
     turnDevice: '請把 iPad 轉成橫向',
     speedLabel: (n) => `${n}×`,
+    startersFirst: `先放${names.trainer}和${names.basicShooter}`,
+    mapTitle: '選一關出發',
+    levelLabel: (n) => `第 ${n} 關`,
+    levelLocked: '先過前一關才能去',
+    levelCleared: '過關了',
+    newFriend: '新朋友',
+    nextLevel: '下一關',
+    backToMap: '回地圖',
+    changeMode: '換模式',
   };
 
   // ===== 版面（基準畫面 1180×820）=====
@@ -87,6 +96,12 @@ window.PD = window.PD || {};
     recallBtn: { x: 896, y: 676, w: 136, h: 120 },
     recallGuardSeconds: 0.35, // 防止手抖連點：第一次點角色後，這段時間內的第二下不算
     orbHitSize: 64,
+    // 大地圖選關：每一關的圓鈕中心，點擊範圍是圓鈕外的正方形（200×200）
+    map: {
+      nodes: [{ x: 230, y: 500 }, { x: 590, y: 320 }, { x: 950, y: 500 }],
+      nodeHit: 200,
+      backBtn: { x: 20, y: 16, w: 170, h: 84 },
+    },
     start: {
       together: { x: 300, y: 470, w: 260, h: 130 },
       solo: { x: 620, y: 470, w: 260, h: 130 },
@@ -134,37 +149,81 @@ window.PD = window.PD || {};
     armored: { hp: 12, secPerCell: 10, size: { w: 72, h: 108 }, color: 0x6c7484, light: 0xc2c9d6, shape: 'plated' },
   };
 
-  // ===== 關卡（逐隻出怪照 plan-v2 附錄）=====
-  // 例外（擁有者決定）：第 4、5 關敵人也要平均分配到當關開放的路線，
-  // 不照附錄的路線（各路相差最多 1 隻：第 4 關 3／3／2／2、第 5 關 4／4／4／3 的組合）。
+  // ===== 關卡 =====
+  // 用「波」來寫：at＝這一波第一隻出現的秒數，gap＝同一波每隻相隔幾秒，kinds＝出場順序。
+  // 路線依 1、3、2、4 整關循環，四條路的敵人數最多只差 1 隻（擁有者決定：平均分配）。
+  const LANE_ORDER = [1, 3, 2, 4];
+  function makeScript(waves) {
+    const script = [];
+    waves.forEach((w, i) => {
+      w.kinds.forEach((kind, k) => {
+        script.push({ t: w.at + k * w.gap, wave: i + 1, lane: LANE_ORDER[script.length % LANE_ORDER.length], kind });
+      });
+    });
+    return script;
+  }
+  const many = (kind, n) => Array(n).fill(kind);
+
   const levels = [
     {
       number: 1,
       openLanes: [1, 2, 3, 4],
       requiredToStart: ['trainer', 'basicShooter'],
       tutorial: { trainer: { lane: 1, col: 1 }, basicShooter: { lane: 1, col: 6 } },
-      // 只影響這一關的調整，理由記在 CLAUDE.md「第 1 關平衡」
+      // 各關 tune 只影響該關，理由與試玩結果記在 CLAUDE.md「各關目標與結果」
       tune: {
-        skyOrbEvery: 14,
+        skyOrbEvery: 12,
         genEvery: 12,
-        // 走速以小兵 9 → 6.5 秒為準，其他敵人照同樣比例（約 0.72 倍）
+        enemies: { scout: { secPerCell: 6.5, hp: 8 } },
+      },
+      script: makeScript([
+        { at: 10, gap: 4, kinds: many('scout', 4) },
+        { at: 34, gap: 4, kinds: many('scout', 4) },
+        { at: 64, gap: 3, kinds: many('scout', 6) },
+        { at: 100, gap: 3, kinds: many('scout', 6) },
+        { at: 138, gap: 2.5, kinds: many('scout', 8) },
+        { at: 176, gap: 2.5, kinds: many('scout', 8) },
+      ]),
+    },
+    {
+      number: 2,
+      openLanes: [1, 2, 3, 4],
+      requiredToStart: ['trainer', 'basicShooter'],
+      tutorial: { trainer: { lane: 1, col: 1 }, basicShooter: { lane: 1, col: 6 } },
+      tune: {
+        skyOrbEvery: 12,
+        genEvery: 12,
+        enemies: { scout: { secPerCell: 6.5, hp: 8 }, tough: { secPerCell: 6.5, hp: 10 } },
+      },
+      script: makeScript([
+        { at: 10, gap: 3, kinds: many('scout', 4) },
+        { at: 40, gap: 3, kinds: ['scout', 'tough', 'scout', 'tough', 'scout', 'tough'] },
+        { at: 80, gap: 2.5, kinds: ['tough', 'scout', 'tough', 'scout', 'tough', 'scout', 'tough', 'scout', 'tough', 'tough'] },
+        { at: 120, gap: 2.5, kinds: many('tough', 9) },
+        { at: 160, gap: 2, kinds: [].concat(...Array(4).fill(['tough', 'scout', 'tough', 'tough'])) },
+      ]),
+    },
+    {
+      number: 3,
+      openLanes: [1, 2, 3, 4],
+      requiredToStart: ['trainer', 'basicShooter'],
+      tutorial: { trainer: { lane: 1, col: 1 }, basicShooter: { lane: 1, col: 6 } },
+      tune: {
+        skyOrbEvery: 12,
+        genEvery: 12,
         enemies: {
           scout: { secPerCell: 6.5, hp: 8 },
-          tough: { secPerCell: 5.8 },
-          runner: { secPerCell: 3.6 },
-          armored: { secPerCell: 7.2 },
+          tough: { secPerCell: 6.5, hp: 12 },
+          runner: { secPerCell: 4, hp: 8 },
         },
       },
-      script: [
-        { t: 10, wave: 1, lane: 1, kind: 'scout' },
-        { t: 13, wave: 1, lane: 3, kind: 'scout' },
-        { t: 16, wave: 1, lane: 2, kind: 'scout' },
-        { t: 19, wave: 1, lane: 4, kind: 'scout' },
-        { t: 22, wave: 2, lane: 1, kind: 'scout' },
-        { t: 25, wave: 2, lane: 3, kind: 'scout' },
-        { t: 28, wave: 2, lane: 2, kind: 'scout' },
-        { t: 31, wave: 2, lane: 4, kind: 'scout' },
-      ],
+      script: makeScript([
+        { at: 10, gap: 3, kinds: ['scout', 'scout', 'tough', 'tough'] },
+        { at: 40, gap: 3, kinds: ['runner', 'scout', 'tough', 'runner', 'scout', 'tough'] },
+        { at: 80, gap: 3, kinds: [].concat(...Array(4).fill(['tough', 'runner'])) },
+        { at: 120, gap: 2.5, kinds: [].concat(...Array(5).fill(['runner', 'tough'])) },
+        { at: 160, gap: 2, kinds: [].concat(...Array(4).fill(['tough', 'runner', 'tough', 'runner'])) },
+      ]),
     },
   ];
 
@@ -175,6 +234,7 @@ window.PD = window.PD || {};
   };
 
   PD.names = names;
+  PD.makeScript = makeScript; // 自動試玩試算不同的波次時也用同一套排路線的規則
   PD.text = text;
   PD.config = {
     layout, units, cardOrder, enemies, levels, modes,

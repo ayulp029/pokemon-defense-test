@@ -9,14 +9,17 @@ const FLAME_SPOTS = [[-0.26, -0.3, 0.8], [0.24, -0.52, 0.95], [0.02, -0.72, 0.75
 PD.BattleScene = class BattleScene extends Phaser.Scene {
   constructor() { super('Battle'); }
 
-  init(data) { this.modeId = data.mode || 'solo'; }
+  init(data) {
+    this.modeId = data.mode || 'solo';
+    this.levelIndex = data.level || 0;
+  }
 
   create() {
     PD.setupCamera(this);
     const cfg = PD.config;
     this.cfg = cfg;
     this.L = cfg.layout;
-    this.sim = new PD.BattleSim(cfg, 0, this.modeId);
+    this.sim = new PD.BattleSim(cfg, this.levelIndex, this.modeId);
     this.fx = new PD.Fx(this, cfg);
     this.overlay = new PD.Overlay(this, cfg);
     this.accum = 0;
@@ -28,7 +31,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     this.hintKey = '';
     this.clock = 0; // 真實時間：防手抖、按鈕閃爍用，不跟著速度鈕變快
     this.worldClock = 0; // 戰場時間：角色與特效的動畫用，跟著速度鈕變快
-    this.speedIndex = 0;
+    this.speedIndex = PD.settings.speedIndex; // 換關時沿用目前倍率
     this.hintSwapAt = 0;
     this.restoring = false;
     this.fpsTime = 0; this.fpsFrames = 0; this.lowFor = 0;
@@ -281,6 +284,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
       case 'placeFail':
         if (ev.reason === 'orbs') this.showHint(PD.text.needMoreOrbs);
         if (ev.reason === 'limit') this.showHint(PD.text.trainerLimit);
+        if (ev.reason === 'startersFirst') this.showHint(PD.text.startersFirst);
         break;
       case 'battleStart':
         this.showHint(PD.text.autoCollect);
@@ -396,9 +400,12 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     this.fx.confetti(this.L.width);
     PD.Sound.stopMusic();
     PD.Sound.play('win');
-    this.overlay.show(PD.text.winTitle, PD.text.winMsg, [
-      { label: PD.text.playAgain, fn: () => this.sim.restart() },
-    ]);
+    PD.Progress.markCleared(this.modeId, this.sim.level.number);
+    const buttons = [];
+    if (this.cfg.levels[this.levelIndex + 1]) buttons.push({ label: PD.text.nextLevel, fn: () => this.goLevel(this.levelIndex + 1) });
+    buttons.push({ label: PD.text.backToMap, fn: () => this.goMap() });
+    buttons.push({ label: PD.text.playAgain, fn: () => this.sim.restart() });
+    this.overlay.show(PD.text.winTitle, PD.text.winMsg, buttons);
   }
 
   onFailed() {
@@ -407,7 +414,15 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     this.overlay.show(PD.text.failTitle, PD.text.failMsg, [
       { label: PD.text.retryWave, fn: () => this.sim.retryWave() },
       { label: PD.text.restart, fn: () => this.sim.restart() },
+      { label: PD.text.backToMap, fn: () => this.goMap() },
     ]);
+  }
+
+  goMap() { this.scene.start('Map', { mode: this.modeId }); }
+
+  goLevel(index) {
+    PD.Sound.startMusic();
+    this.scene.start('Battle', { mode: this.modeId, level: index });
   }
 
   // 把狀態同步到畫面
@@ -884,6 +899,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     const s = this.sim.state;
     if (!card.unlocked) { this.showHint(PD.text.lockedCard(card.def.unlock)); return; }
     if (this.selected === card.kind) { this.setSelected(null); return; }
+    if (s.phase === 'prep' && this.sim.level.requiredToStart.indexOf(card.kind) === -1) { this.showHint(PD.text.startersFirst); return; }
     if (s.balls < card.def.cost) { this.showHint(PD.text.needMoreOrbs); return; }
     this.setSelected(card.kind);
   }
@@ -910,6 +926,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
 
   cycleSpeed() {
     this.speedIndex = (this.speedIndex + 1) % this.cfg.speedSteps.length;
+    PD.settings.speedIndex = this.speedIndex;
     this.speedText.setText(PD.text.speedLabel(this.gameSpeed));
     PD.Sound.play('tap');
   }
@@ -933,10 +950,11 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
   showPauseOverlay() {
     const T = PD.text;
     const label = () => (PD.settings.reduceFx ? T.reduceFxOn : T.reduceFxOff);
-    this.overlay.show(T.pauseTitle, '', [
+    this.overlay.show(T.pauseTitle, T.levelLabel(this.sim.level.number), [
       { label: T.resume, fn: () => this.resume() },
       { label: label(), fn: () => { PD.settings.reduceFx = !PD.settings.reduceFx; this.overlay.relabel(1, label()); } },
       { label: T.restart, fn: () => { this.pausedBy = null; this.sim.restart(); this.drainEvents(); } },
+      { label: T.backToMap, fn: () => this.goMap() },
     ]);
   }
 

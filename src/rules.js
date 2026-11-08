@@ -76,6 +76,8 @@ PD.BattleSim = class BattleSim {
     const def = this.cfg.units[kind];
     if (s.phase !== 'prep' && s.phase !== 'battle') return 'phase';
     if (!this.isUnlocked(kind)) return 'locked';
+    // 開戰前只能放開戰需要的角色，否則球花光又沒有收入，會永遠開不了戰
+    if (s.phase === 'prep' && this.level.requiredToStart.indexOf(kind) === -1) return 'startersFirst';
     if (!this.isLaneOpen(lane)) return 'rest';
     if (col < 1 || col > this.cfg.layout.grid.cols) return 'outside';
     if (this.unitAt(lane, col)) return 'occupied';

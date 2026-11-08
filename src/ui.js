@@ -30,7 +30,7 @@ PD.Overlay = class Overlay {
     this.msg = PD.txt(scene, this.cx, 368, '', 32);
     this.c.add([this.dim, this.panel, this.title, this.msg]);
     this.btns = [];
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 4; i++) {
       const bg = PD.img(scene, 0, 0, 'btnWide');
       const label = PD.txt(scene, 0, 0, '', 32, '#3a2a10', 0);
       this.c.add([bg, label]);
@@ -41,20 +41,25 @@ PD.Overlay = class Overlay {
   show(title, msg, buttons) {
     this.title.setText(title);
     this.msg.setText(msg || '');
-    const total = buttons.length * 300 + (buttons.length - 1) * 30;
-    let x = this.cx - total / 2 + 150;
+    // 四顆按鈕排成兩列兩行（暫停畫面），其他情況排一列
+    const twoRows = buttons.length > 3;
+    const perRow = twoRows ? 2 : buttons.length;
+    const startX = this.cx - (perRow * 300 + (perRow - 1) * 30) / 2 + 150;
+    this.title.setY(twoRows ? 262 : 280);
+    this.msg.setY(twoRows ? 336 : 368);
     this.btns.forEach((b, i) => {
       const def = buttons[i];
       b.on = !!def;
       b.bg.setVisible(b.on);
       b.label.setVisible(b.on);
       if (!def) return;
+      const x = startX + (i % perRow) * 330;
+      const y = twoRows ? 426 + Math.floor(i / perRow) * 100 : 500;
       b.fn = def.fn;
-      b.bg.setPosition(x, 500);
-      b.label.setPosition(x, 500).setText(def.label);
+      b.bg.setPosition(x, y);
+      b.label.setPosition(x, y).setText(def.label);
       b.rect.x = x - 150;
-      b.rect.y = 454;
-      x += 330;
+      b.rect.y = y - 46;
     });
     this.c.setVisible(true);
     this.visible = true;

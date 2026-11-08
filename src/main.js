@@ -1,6 +1,6 @@
 // 啟動遊戲、開始畫面。
 window.PD = window.PD || {};
-PD.settings = { reduceFx: false };
+PD.settings = { reduceFx: false, speedIndex: 0 };
 
 PD.setupCamera = function (scene) {
   scene.cameras.main.setOrigin(0, 0).setZoom(PD.RES);
@@ -68,7 +68,7 @@ PD.StartScene = class StartScene extends Phaser.Scene {
     PD.Sound.unlock();
     PD.Sound.startMusic();
     PD.Sound.play('tap');
-    this.scene.start('Battle', { mode });
+    this.scene.start('Map', { mode });
   }
 };
 
@@ -117,6 +117,6 @@ PD.probeIdleSheets().then(function () {
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
     audio: { noAudio: true },
     banner: false,
-    scene: [PD.BootScene, PD.StartScene, PD.BattleScene],
+    scene: [PD.BootScene, PD.StartScene, PD.MapScene, PD.BattleScene],
   });
 });
