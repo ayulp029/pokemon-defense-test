@@ -9,9 +9,10 @@ PD.setupCamera = function (scene) {
 PD.BootScene = class BootScene extends Phaser.Scene {
   constructor() { super('Boot'); }
 
-  // 本機貼圖：不存在的檔案載入失敗就略過，該角色自動用色塊
+  // 本機貼圖（我方與敵人）：不存在的檔案載入失敗就略過，該角色自動用色塊
   preload() {
-    PD.config.cardOrder.forEach((k) => this.load.image('art_' + k, 'assets/local-art/' + k + '.png'));
+    [...PD.config.cardOrder, ...Object.keys(PD.config.enemies)]
+      .forEach((k) => this.load.image('art_' + k, 'assets/local-art/' + k + '.png'));
   }
 
   create() {

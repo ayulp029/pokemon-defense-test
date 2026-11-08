@@ -207,7 +207,10 @@ PD.Fx = class Fx {
     if (!s.landed && k >= (s.fx === 'vine' ? 0.5 : 1)) {
       s.landed = true;
       this.impact(s.fx, s.x1, s.y1);
-      if (alive) s.view.flash = 0.1;
+      if (alive) {
+        s.view.flash = 0.1;
+        PD.Anim.hurt(s.view, PD.Anim.styleOf(s.view.kind));
+      }
     }
     if (k >= 1) {
       if (s.fx === 'vine') this.burst('leafP', s.x1, s.y1, 0x7ee081, 4, 90, 0.5, 0.6, 0.2, 200);

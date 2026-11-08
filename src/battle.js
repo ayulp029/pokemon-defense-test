@@ -173,6 +173,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
       flash: 0, land: 0, dying: 0, gone: false, defeated: false, homed: false, seed: id * 1.7, emberT: 0,
       lane: 0, kind: '',
       charge: 0, relT: -1, relDur: 0, relStrike: null, hurtT: 0, swing: 0, lastHitTick: -999, lastGen: -1,
+      walking: 0, lastContact: 0, lastBlockedId: 0,
     });
     v.shadow.x = 0;
     v.body.setFrame(frame).clearTint().setScale(PD.TEX_SCALE).setPosition(0, 0).setRotation(0).setAlpha(1);
@@ -457,6 +458,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     if (!v) {
       v = this.acquireActor(e.id, 'enemy_' + e.kind, PD.names[e.kind], def.size, this.footY(e.lane), true);
       v.kind = e.kind;
+      if (this.textures.exists('art_' + e.kind)) v.label.setText(''); // 有貼圖就不在身上蓋字
       v.c.setDepth(25 + e.lane * 10);
     }
     v.seen = true;
@@ -475,25 +477,34 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
         });
       }
     }
-    this.animateActor(v, e.hp, e.maxHp, e.blockedId ? 0 : 1);
+    const style = PD.Anim.styleOf(e.kind);
+    // 接觸計時歸零、擋路的還是同一位，代表這一刻出手了（規則沒有敵人出手的事件）
+    if (e.blockedId && e.blockedId === v.lastBlockedId && e.contact < v.lastContact) {
+      PD.Anim.release(v, style, false);
+    }
+    v.lastContact = e.contact;
+    v.lastBlockedId = e.blockedId;
+    this.animateActor(v, e.hp, e.maxHp, e.blockedId ? 0 : 1, style, this.enemyCharge(e, style));
   }
 
-  // style 只有我方角色才有；敵人維持原本的走路彈跳
+  // 敵人的蓄力進度 0～1，只讀規則的接觸計時
+  enemyCharge(e, style) {
+    if (!e.blockedId || this.sim.state.phase !== 'battle') return 0;
+    const R = this.cfg.rules;
+    const left = (this.sim.ticks(R.enemyContactEvery) - e.contact) * R.tickSeconds - this.accum;
+    return left > 0 && left < style.windup ? 1 - left / style.windup : 0;
+  }
+
   animateActor(v, hp, maxHp, walking, style, charge) {
     const dt = this.frameDt;
     let sx = 1;
     let sy = 1;
-    let rot = 0;
-    let offX = 0;
-    let offY = 0;
-    if (style) {
-      const P = PD.Anim.compute(v, style, charge, dt, this.clock, this.cfg.debug.timeScale, this.fx.reduced);
-      sx += P.sx; sy += P.sy; rot = P.r; offX = P.x; offY = P.y;
-    } else {
-      const t = this.clock * (walking ? 7 : 2.4) + v.seed;
-      sy += Math.sin(t) * 0.025;
-      if (walking) offY = -Math.abs(Math.sin(t)) * 4;
-    }
+    v.walking = walking;
+    const P = PD.Anim.compute(v, style, charge, dt, this.clock, this.cfg.debug.timeScale, this.fx.reduced);
+    sx += P.sx; sy += P.sy;
+    const rot = P.r;
+    let offX = P.x;
+    let offY = P.y;
 
     if (v.land > 0) {
       v.land -= dt;

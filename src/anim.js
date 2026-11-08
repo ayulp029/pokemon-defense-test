@@ -1,4 +1,4 @@
-// 我方角色的動作（蓄力、出手、後座、受擊、待機呼吸）。
+// 我方與敵人的動作（蓄力、出手、後座、受擊、待機呼吸，敵人多一個走路）。
 // 只算外觀：不讀寫戰鬥數值，色塊和貼圖都用同一套（動的是 body 這張圖）。
 // 每格畫面只改寫固定的物件，不新建東西，也不用 Phaser tween，避免 iPad 上頓一下。
 window.PD = window.PD || {};
@@ -8,6 +8,7 @@ PD.Anim = (function () {
   const pose = (sx, sy, r, x, y) => ({ sx, sy, r, x, y });
 
   const DEFAULT_HURT = { dur: 0.2, kick: -3, jitter: 0, tilt: 0, squash: 0.05 };
+  const ENEMY_HURT = { dur: 0.22, kick: -4, jitter: 1.2, tilt: 0.03, squash: 0.06 };
 
   const styles = {
     // 小勇：不攻擊，產球時蹲一下再開心跳起來
@@ -53,6 +54,36 @@ PD.Anim = (function () {
       snap: 0.06, dur: 0.38, strike: pose(-0.1, 0.16, 0.22, 14, 0),
       recoil: pose(0.05, -0.05, -0.05, -6, 0),
       hurt: DEFAULT_HURT,
+    },
+
+    // ===== 敵人：facing -1 代表面朝左，「往前」會自動換成往左 =====
+    // 基本敵人：一步一步走，碰到角色時後拉再往前推
+    scout: {
+      facing: -1, idle: { speed: 2.4, amp: 0.025, sway: 0.01 }, walk: { speed: 7, hop: 4, tilt: 0.03 },
+      windup: 0.3, charge: pose(0.06, -0.08, -0.12, -4, 0),
+      snap: 0.07, dur: 0.4, strike: pose(-0.04, 0.06, 0.18, 10, 0),
+      hurt: ENEMY_HURT,
+    },
+    // 生命較高的敵人：貼地滑行，幾乎不跳，左右搖擺大一點；攻擊時身體伸長
+    tough: {
+      facing: -1, idle: { speed: 2.0, amp: 0.03, sway: 0.016 }, walk: { speed: 5, hop: 1.5, tilt: 0.06 },
+      windup: 0.34, charge: pose(0.1, -0.12, -0.14, -5, 0),
+      snap: 0.07, dur: 0.42, strike: pose(0.12, -0.08, 0.2, 12, 0),
+      hurt: ENEMY_HURT,
+    },
+    // 走得快的敵人：小步快跑，身體前傾；攻擊短促
+    runner: {
+      facing: -1, idle: { speed: 3.2, amp: 0.028, sway: 0.012 }, walk: { speed: 12, hop: 6, tilt: 0.05 },
+      windup: 0.22, charge: pose(0.1, -0.12, -0.08, -4, 0),
+      snap: 0.05, dur: 0.3, strike: pose(-0.08, 0.1, 0.18, 12, 0),
+      hurt: ENEMY_HURT,
+    },
+    // 高生命敵人：走得又慢又重，被打時穩穩抖一下
+    armored: {
+      facing: -1, idle: { speed: 1.4, amp: 0.03, sway: 0.006 }, walk: { speed: 4, hop: 2, tilt: 0.02 },
+      windup: 0.4, charge: pose(0.05, -0.06, -0.08, -5, 0),
+      snap: 0.09, dur: 0.5, strike: pose(-0.03, 0.05, 0.12, 9, 0),
+      hurt: { dur: 0.3, kick: -3, jitter: 2, tilt: 0.04, squash: 0.08 },
     },
   };
 
@@ -154,6 +185,13 @@ PD.Anim = (function () {
       P.sy += breath;
       P.sx -= breath * 0.6;
       P.r += Math.sin(t * 0.5) * st.idle.sway;
+
+      if (st.walk && v.walking) {
+        const w = clock * st.walk.speed + v.seed;
+        P.y -= Math.abs(Math.sin(w)) * st.walk.hop;
+        P.r += Math.sin(w) * st.walk.tilt;
+      }
+      if (st.facing === -1) { P.x = -P.x; P.r = -P.r; }
       return P;
     },
   };

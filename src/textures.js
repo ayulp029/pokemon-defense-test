@@ -392,7 +392,10 @@ PD.TEX_SCALE = 1 / PD.RES;
     });
     Object.keys(cfg.enemies).forEach((k) => {
       const d = cfg.enemies[k];
-      add('enemy_' + k, d.size.w, d.size.h, (c) => drawEnemy(c, d.size.w, d.size.h, d));
+      const art = scene.textures.exists('art_' + k) ? scene.textures.get('art_' + k).getSourceImage() : null;
+      add('enemy_' + k, d.size.w, d.size.h, (c) => (
+        art ? drawArt(c, d.size.w, d.size.h, art) : drawEnemy(c, d.size.w, d.size.h, d)
+      ));
     });
     return list;
   }
