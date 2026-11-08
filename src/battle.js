@@ -165,14 +165,16 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
       const burn = PD.img(this, 0, 0, 'iconBurn');
       const slow = PD.img(this, 0, 0, 'iconSlow');
       c.add([shadow, body, label, hpBack, hpFill, burn, slow]);
-      v = { c, shadow, body, label, hpBack, hpFill, burn, slow, kindClass: 'actor' };
+      v = { c, shadow, body, label, hpBack, hpFill, burn, slow, kindClass: 'actor', ...PD.Anim.newSlots() };
     }
     v.shadow.setScale(PD.TEX_SCALE * (size.w * 1.15) / 96, PD.TEX_SCALE * 0.9);
     Object.assign(v, {
       id, active: true, w: size.w, h: size.h, isEnemy, foot, seen: true,
-      flash: 0, atk: 0, land: 0, dying: 0, gone: false, defeated: false, homed: false, seed: id * 1.7, emberT: 0,
+      flash: 0, land: 0, dying: 0, gone: false, defeated: false, homed: false, seed: id * 1.7, emberT: 0,
       lane: 0, kind: '',
+      charge: 0, relT: -1, relDur: 0, relStrike: null, hurtT: 0, swing: 0, lastHitTick: -999, lastGen: -1,
     });
+    v.shadow.x = 0;
     v.body.setFrame(frame).clearTint().setScale(PD.TEX_SCALE).setPosition(0, 0).setRotation(0).setAlpha(1);
     v.label.setText(name).setPosition(0, -size.h * 0.5);
     v.hpBack.setPosition(0, -size.h - 8);
@@ -219,6 +221,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     if (this.pausedBy) return;
     const dt = Math.min(delta, 100) / 1000;
     this.clock += dt;
+    this.frameDt = dt;
     const sim = this.sim;
     if (!this.overlay.visible) {
       this.accum += dt * this.cfg.debug.timeScale;
@@ -284,6 +287,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
       case 'unitHit':
         if (v) {
           v.flash = 0.1;
+          PD.Anim.hurt(v, PD.Anim.styleOf(v.kind));
           this.fx.burst('spark', v.c.x, v.c.y - v.h * 0.5, 0xffffff, 6, 90, 0.25, 0.5, 0.1);
         }
         break;
@@ -328,9 +332,29 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     const shooter = this.viewById.get(ev.unitId);
     const target = this.viewById.get(ev.targetId);
     if (!shooter || !target) return;
-    shooter.atk = 0.22;
+    const def = this.cfg.units[shooter.kind];
+    const style = PD.Anim.styleOf(shooter.kind);
+    // 雙擊：上一下剛打完才算第二下（第二下落空時，下一輪仍從第一下開始）
+    const tick = this.sim.state.tick;
+    const second = !!def.secondHitDelay && shooter.swing === 1 &&
+      tick - shooter.lastHitTick <= this.sim.ticks(def.secondHitDelay) + 2;
+    shooter.swing = second ? 2 : 1;
+    shooter.lastHitTick = tick;
+    const strike = PD.Anim.release(shooter, style, second);
+    const m = PD.Anim.muzzle(shooter, strike);
     PD.Sound.play('shot');
-    this.fx.fire(ev.fx, shooter.c.x + shooter.w * 0.4, shooter.c.y - shooter.h * 0.55, target);
+    this.fx.fire(ev.fx, m.x, m.y, target);
+    if (ev.fx !== 'vine' && !this.fx.reduced) this.fx.glowPop(m.x, m.y, PD.Fx.COLORS[ev.fx], 0.45, 0.12);
+  }
+
+  // 蓄力進度 0～1：讀規則裡下一次出手的時間，讓蓄力剛好在出手那一刻結束
+  chargeProgress(u, def, style) {
+    const s = this.sim.state;
+    if (!style.windup || s.phase !== 'battle') return 0;
+    if (!def.genEvery && !u.targetId) return 0;
+    const next = def.genEvery ? u.genNext : u.fireTick;
+    const left = (next - s.tick) * this.cfg.rules.tickSeconds - this.accum;
+    return left > 0 && left < style.windup ? 1 - left / style.windup : 0;
   }
 
   showWaveHint(ev) {
@@ -418,7 +442,13 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
       }
     }
     v.seen = true;
-    this.animateActor(v, u.hp, u.maxHp, 0);
+    const style = PD.Anim.styleOf(u.kind);
+    if (def.genEvery) {
+      // 產球沒有專屬事件，看下一次產球時間有沒有往後跳
+      if (v.lastGen >= 0 && u.genNext !== v.lastGen) PD.Anim.release(v, style, false);
+      v.lastGen = u.genNext;
+    }
+    this.animateActor(v, u.hp, u.maxHp, 0, style, this.chargeProgress(u, def, style));
   }
 
   syncEnemy(e, alpha) {
@@ -448,31 +478,40 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     this.animateActor(v, e.hp, e.maxHp, e.blockedId ? 0 : 1);
   }
 
-  animateActor(v, hp, maxHp, walking) {
-    const dt = 1 / 60;
-    const t = this.clock * (walking ? 7 : 2.4) + v.seed;
+  // style 只有我方角色才有；敵人維持原本的走路彈跳
+  animateActor(v, hp, maxHp, walking, style, charge) {
+    const dt = this.frameDt;
     let sx = 1;
-    let sy = 1 + Math.sin(t) * 0.025;
-    let offY = walking ? -Math.abs(Math.sin(t)) * 4 : 0;
-
-    if (v.atk > 0) {
-      v.atk -= dt;
-      const k = Math.sin((1 - v.atk / 0.22) * Math.PI);
-      sx += k * 0.14; sy -= k * 0.1;
+    let sy = 1;
+    let rot = 0;
+    let offX = 0;
+    let offY = 0;
+    if (style) {
+      const P = PD.Anim.compute(v, style, charge, dt, this.clock, this.cfg.debug.timeScale, this.fx.reduced);
+      sx += P.sx; sy += P.sy; rot = P.r; offX = P.x; offY = P.y;
+    } else {
+      const t = this.clock * (walking ? 7 : 2.4) + v.seed;
+      sy += Math.sin(t) * 0.025;
+      if (walking) offY = -Math.abs(Math.sin(t)) * 4;
     }
+
     if (v.land > 0) {
       v.land -= dt;
       const k = Math.max(0, v.land / 0.38);
       offY -= Math.sin(k * Math.PI) * 26;
       sx += k * 0.12; sy -= k * 0.08;
     }
-    v.body.setScale(PD.TEX_SCALE * sx, PD.TEX_SCALE * sy).setY(offY);
     if (v.flash > 0) {
       v.flash -= dt;
       v.body.setTintFill(0xffffff);
-      v.body.setX(Math.sin(v.flash * 90) * 2);
-      if (v.flash <= 0) { v.body.clearTint(); v.body.setX(0); }
+      offX += Math.sin(v.flash * 90) * 2;
+      if (v.flash <= 0) v.body.clearTint();
     }
+    v.body.setScale(PD.TEX_SCALE * sx, PD.TEX_SCALE * sy).setPosition(offX, offY).setRotation(rot);
+    v.shadow.x = offX * 0.6;
+    // 色塊身上的名字跟著身體動（身體以腳底為軸傾斜）
+    const half = v.h * 0.5;
+    v.label.setPosition(offX + Math.sin(rot) * half, offY - Math.cos(rot) * half).setRotation(rot);
     const ratio = Math.max(0, hp / maxHp);
     v.hpFill.setScale(PD.TEX_SCALE * ratio, PD.TEX_SCALE)
       .setTint(ratio > 0.5 ? 0x7ee081 : ratio > 0.25 ? 0xffd84a : 0xff9a5a);
