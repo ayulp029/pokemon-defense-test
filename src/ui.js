@@ -25,9 +25,10 @@ PD.Overlay = class Overlay {
     this.c = scene.add.container(0, 0).setDepth(500).setVisible(false);
     this.dim = scene.add.image(this.cx, L.height / 2, 'atlas', 'white')
       .setDisplaySize(L.width + 40, L.height + 40).setTint(0x101a24).setAlpha(0.55);
+    this.panel = scene.add.image(this.cx, 400, 'panel').setScale(PD.TEX_SCALE);
     this.title = PD.txt(scene, this.cx, 280, '', 60, '#ffe9a8', 7);
     this.msg = PD.txt(scene, this.cx, 368, '', 32);
-    this.c.add([this.dim, this.title, this.msg]);
+    this.c.add([this.dim, this.panel, this.title, this.msg]);
     this.btns = [];
     for (let i = 0; i < 3; i++) {
       const bg = PD.img(scene, 0, 0, 'btnWide');

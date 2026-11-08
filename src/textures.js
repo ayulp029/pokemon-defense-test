@@ -1,10 +1,21 @@
 // 所有圖都用程式畫一次，合併成一張大圖（減少繪圖切換）。
-// 圖以 2 倍密度繪製，放到畫面時用 0.5 倍（PD.TEX_SCALE）。
+// 圖的密度等於畫面實際像素（PD.RES），放到畫面時剛好一比一，不會被再縮放一次而變糊。
 window.PD = window.PD || {};
-PD.TEX_SCALE = 0.5;
+
+// 畫面內部解析度：對齊 iPad 上實際顯示的像素，最多 2 倍。
+// 取 0.05 的倍數，1180×820 乘起來才會是整數。用長短邊計算，直向開啟也算得對。
+PD.RES = (function () {
+  const L = PD.config.layout;
+  const long = Math.max(window.innerWidth, window.innerHeight);
+  const short = Math.min(window.innerWidth, window.innerHeight);
+  const fit = Math.min(long / L.width, short / L.height);
+  const res = Math.round((window.devicePixelRatio || 1) * fit * 20) / 20;
+  return Math.min(2, Math.max(1, res));
+})();
+PD.TEX_SCALE = 1 / PD.RES;
 
 (function () {
-  const DENSITY = 2;
+  const DENSITY = PD.RES;
   const ATLAS = 2048;
   const PAD = 3;
   const OUTLINE = '#1f2a38';
@@ -20,14 +31,30 @@ PD.TEX_SCALE = 0.5;
     ctx.closePath();
   }
 
-  // 本機貼圖：等比縮進角色大小，腳底對齊下緣、左右置中
+  // 本機貼圖：等比縮進角色大小，腳底對齊下緣、左右置中。
+  // 縮超過一半時先分次對半縮，細線才不會出現鋸齒。
   function drawArt(ctx, w, h, img) {
     const s = Math.min(w / img.width, h / img.height);
     const dw = img.width * s;
     const dh = img.height * s;
+    let src = img;
+    let sw = img.width;
+    let sh = img.height;
+    while (sw > dw * DENSITY * 2 && sh > dh * DENSITY * 2) {
+      const half = document.createElement('canvas');
+      half.width = Math.ceil(sw / 2);
+      half.height = Math.ceil(sh / 2);
+      const hc = half.getContext('2d');
+      hc.imageSmoothingEnabled = true;
+      hc.imageSmoothingQuality = 'high';
+      hc.drawImage(src, 0, 0, half.width, half.height);
+      src = half;
+      sw = half.width;
+      sh = half.height;
+    }
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(img, (w - dw) / 2, h - dh, dw, dh);
+    ctx.drawImage(src, (w - dw) / 2, h - dh, dw, dh);
   }
 
   function poly(ctx, pts) {
@@ -194,6 +221,26 @@ PD.TEX_SCALE = 0.5;
     star(ctx, c, c, r * 0.5, r * 0.22); ctx.fill();
   }
 
+  // 按鈕與卡片共用的底：漸層、外框、上方亮面、下方厚度、內側細線
+  function drawPanelBase(c, w, h, top, bottom) {
+    rr(c, 3, 3, w - 6, h - 6, 18);
+    const g = c.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, top); g.addColorStop(1, bottom);
+    c.fillStyle = g; c.fill();
+    c.save();
+    c.clip();
+    const gloss = c.createLinearGradient(0, 0, 0, h * 0.45);
+    gloss.addColorStop(0, 'rgba(255,255,255,0.38)');
+    gloss.addColorStop(1, 'rgba(255,255,255,0)');
+    c.fillStyle = gloss; c.fillRect(0, 0, w, h * 0.45);
+    c.fillStyle = 'rgba(30,20,10,0.16)'; c.fillRect(0, h - 11, w, 11);
+    c.restore();
+    rr(c, 7, 7, w - 14, h - 14, 14);
+    c.lineWidth = 1.5; c.strokeStyle = 'rgba(255,255,255,0.4)'; c.stroke();
+    rr(c, 3, 3, w - 6, h - 6, 18);
+    c.lineWidth = 3; c.strokeStyle = OUTLINE; c.stroke();
+  }
+
   // 每張圖：名稱、邏輯寬高、畫法
   function frameList(cfg, scene) {
     const list = [];
@@ -250,22 +297,52 @@ PD.TEX_SCALE = 0.5;
     add('orb', 56, 56, (c) => drawOrb(c, 56));
     add('hpBack', 56, 8, (c) => { c.fillStyle = 'rgba(20,30,40,0.75)'; rr(c, 0, 0, 56, 8, 4); c.fill(); });
     add('hpFill', 52, 4, (c) => { c.fillStyle = '#fff'; c.fillRect(0, 0, 52, 4); });
+    add('shadow', 96, 28, (c) => {
+      c.save();
+      c.scale(1, 28 / 96);
+      const g = c.createRadialGradient(48, 48, 0, 48, 48, 48);
+      g.addColorStop(0, 'rgba(14,26,16,0.5)');
+      g.addColorStop(0.65, 'rgba(14,26,16,0.28)');
+      g.addColorStop(1, 'rgba(14,26,16,0)');
+      c.fillStyle = g;
+      c.fillRect(0, 0, 96, 96);
+      c.restore();
+    });
+    // 救援次數的底板：寬度依模式的次數而定
+    Object.keys(cfg.modes).forEach((m) => {
+      const n = cfg.modes[m].rescues;
+      const w = n * 30 + 20;
+      add('plateRescue_' + n, w, 56, (c) => {
+        rr(c, 1.5, 1.5, w - 3, 53, 14);
+        c.fillStyle = 'rgba(10,22,18,0.5)'; c.fill();
+        c.lineWidth = 1.5; c.strokeStyle = 'rgba(255,255,255,0.16)'; c.stroke();
+      });
+    });
     add('iconBurn', 20, 20, (c) => { c.strokeStyle = OUTLINE; c.lineWidth = 1.5; c.translate(0, 10); icons.flame(c, 10, 8, '#ff9a3c'); });
     add('iconSlow', 20, 20, (c) => { c.strokeStyle = OUTLINE; c.lineWidth = 1.5; c.translate(0, 10); icons.drop(c, 10, 8, '#6cc7ff'); });
     add('shield', 26, 30, (c) => { c.strokeStyle = OUTLINE; c.lineWidth = 2; c.translate(0, 15); icons.shield(c, 13, 13, '#7fd0ff'); });
     add('shieldUsed', 26, 30, (c) => { c.strokeStyle = 'rgba(255,255,255,0.4)'; c.lineWidth = 2; c.translate(0, 15); icons.shield(c, 13, 13, 'rgba(255,255,255,0.14)'); });
 
     const btnFrame = (name, w, h, top, bottom) => add(name, w, h, (c) => {
-      rr(c, 3, 3, w - 6, h - 6, 18);
-      const g = c.createLinearGradient(0, 0, 0, h);
-      g.addColorStop(0, top); g.addColorStop(1, bottom);
-      c.fillStyle = g; c.fill();
-      c.lineWidth = 3; c.strokeStyle = OUTLINE; c.stroke();
+      drawPanelBase(c, w, h, top, bottom);
+    });
+    // 每位角色一張底卡：上方是角色主色的頭像窗，下方是放名字的白色名牌
+    Object.keys(cfg.units).forEach((k) => {
+      const d = cfg.units[k];
+      add('card_' + k, 136, 120, (c) => {
+        drawPanelBase(c, 136, 120, '#fdf6e0', '#e6d6ae');
+        rr(c, 9, 8, 118, 82, 12);
+        const g = c.createLinearGradient(0, 8, 0, 90);
+        g.addColorStop(0, hex(d.light)); g.addColorStop(1, hex(d.color));
+        c.save(); c.globalAlpha = 0.7; c.fillStyle = g; c.fill(); c.restore();
+        c.lineWidth = 1.5; c.strokeStyle = 'rgba(31,42,56,0.35)'; c.stroke();
+        rr(c, 9, 91, 118, 23, 8);
+        c.fillStyle = 'rgba(255,255,255,0.75)'; c.fill();
+      });
     });
     btnFrame('btnSquare', 72, 72, '#5a7a9a', '#3c566f');
     btnFrame('btnBig', 260, 130, '#ffcf5a', '#f09a2e');
     btnFrame('btnWide', 300, 92, '#ffcf5a', '#f09a2e');
-    btnFrame('card', 136, 120, '#fdf6e0', '#e6d6ae');
     btnFrame('cardLocked', 136, 120, '#8d97a3', '#6a7480');
     btnFrame('cancel', 120, 120, '#f0a0a0', '#d06a6a');
     btnFrame('recall', 136, 120, '#8fd0c8', '#4f9c94');
@@ -304,6 +381,14 @@ PD.TEX_SCALE = 0.5;
       add('unit_' + k, d.size.w, d.size.h, (c) => (
         art ? drawArt(c, d.size.w, d.size.h, art) : drawUnit(c, d.size.w, d.size.h, d)
       ));
+      // 卡片頭像另外畫成剛好的大小，不靠遊戲中再縮小
+      add('cardPic_' + k, 60, 78, (c) => {
+        if (art) { drawArt(c, 60, 78, art); return; }
+        const s = Math.min(60 / d.size.w, 78 / d.size.h);
+        c.translate((60 - d.size.w * s) / 2, 78 - d.size.h * s);
+        c.scale(s, s);
+        drawUnit(c, d.size.w, d.size.h, d);
+      });
     });
     Object.keys(cfg.enemies).forEach((k) => {
       const d = cfg.enemies[k];
@@ -319,10 +404,12 @@ PD.TEX_SCALE = 0.5;
     const ctx = canvas.getContext('2d');
     const frames = [];
     let x = PAD, y = PAD, rowH = 0;
-    frameList(cfg, scene).forEach((f) => {
+    // 由高排到矮，大圖上的空隙最少
+    frameList(cfg, scene).sort((a, b) => b.h - a.h).forEach((f) => {
       const pw = Math.ceil(f.w * DENSITY);
       const ph = Math.ceil(f.h * DENSITY);
       if (x + pw + PAD > ATLAS) { x = PAD; y += rowH + PAD; rowH = 0; }
+      if (y + ph + PAD > ATLAS) console.error('貼圖大圖放不下：' + f.name);
       ctx.save();
       ctx.translate(x, y);
       ctx.beginPath(); ctx.rect(0, 0, pw, ph); ctx.clip();
@@ -338,73 +425,5 @@ PD.TEX_SCALE = 0.5;
     frames.forEach((f) => tex.add(f.name, 0, f.x, f.y, f.w, f.h));
   };
 
-  // 場地背景（靜態，只畫一次）
-  PD.buildBackground = function (scene, cfg, level) {
-    const L = cfg.layout;
-    const G = L.grid;
-    const canvas = document.createElement('canvas');
-    canvas.width = L.width * DENSITY;
-    canvas.height = L.height * DENSITY;
-    const c = canvas.getContext('2d');
-    c.scale(DENSITY, DENSITY);
-
-    // 底色
-    c.fillStyle = '#26382c'; c.fillRect(0, 0, L.width, L.height);
-
-    // 村莊
-    const vg = c.createLinearGradient(0, G.y, 0, G.y + G.rows * G.cellH);
-    vg.addColorStop(0, '#d9c99a'); vg.addColorStop(1, '#bda873');
-    c.fillStyle = vg; c.fillRect(0, G.y, G.x, G.rows * G.cellH);
-    L.laneY.forEach((y, i) => {
-      const hx = 24, hy = y - 44;
-      c.fillStyle = ['#e8896a', '#6aa8e8', '#e8c76a', '#8ac77a'][i];
-      poly(c, [[hx - 10, hy + 34], [hx + 34, hy - 4], [hx + 78, hy + 34]]); c.fill();
-      c.lineWidth = 3; c.strokeStyle = OUTLINE; c.stroke();
-      c.fillStyle = '#f7ecd2'; c.fillRect(hx + 4, hy + 34, 60, 50); c.strokeRect(hx + 4, hy + 34, 60, 50);
-      c.fillStyle = '#7a5a3a'; c.fillRect(hx + 26, hy + 56, 16, 28);
-    });
-
-    // 出怪區
-    const sx = G.x + G.cols * G.cellW;
-    c.fillStyle = '#4a4560'; c.fillRect(sx, G.y, L.width - sx, G.rows * G.cellH);
-
-    // 草地（低彩度）
-    for (let r = 0; r < G.rows; r++) {
-      const open = level.openLanes.indexOf(r + 1) !== -1;
-      for (let col = 0; col < G.cols; col++) {
-        const even = (r + col) % 2 === 0;
-        c.fillStyle = open ? (even ? '#7fa86a' : '#739c60') : (even ? '#7d8a7c' : '#758274');
-        c.fillRect(G.x + col * G.cellW, G.y + r * G.cellH, G.cellW, G.cellH);
-      }
-      if (!open) {
-        // 休息路：淡淡的雲紋與鎖路圖示
-        const y = G.y + r * G.cellH;
-        c.fillStyle = 'rgba(255,255,255,0.12)';
-        for (let i = 0; i < 5; i++) {
-          const cx = G.x + 90 + i * 195;
-          const cy = y + 42 + (i % 2) * 58;
-          [[0, 0, 26], [28, 6, 20], [-26, 8, 18]].forEach((p) => {
-            c.beginPath(); c.arc(cx + p[0], cy + p[1], p[2], 0, 7); c.fill();
-          });
-        }
-        c.save();
-        c.translate(G.x + (G.cols * G.cellW) / 2 - 58, y + G.cellH / 2 - 26);
-        c.globalAlpha = 0.55;
-        c.strokeStyle = '#fff'; c.lineWidth = 6;
-        c.beginPath(); c.arc(22, 20, 12, Math.PI, 0); c.stroke();
-        c.fillStyle = '#fff'; rr(c, 5, 20, 34, 28, 6); c.fill();
-        c.restore();
-        c.fillStyle = 'rgba(255,255,255,0.6)';
-        c.font = 'bold 32px "PingFang TC","Noto Sans CJK TC",sans-serif';
-        c.textBaseline = 'middle';
-        c.fillText(PD.text.rest, G.x + (G.cols * G.cellW) / 2 - 2, y + G.cellH / 2);
-      }
-    }
-
-    // 上方資訊列與卡片區底
-    c.fillStyle = '#2f4436'; c.fillRect(0, 0, L.width, L.topBar.h);
-    c.fillStyle = '#2f4436'; c.fillRect(0, G.y + G.rows * G.cellH, L.width, L.height - (G.y + G.rows * G.cellH));
-
-    scene.textures.addCanvas('bg', canvas);
-  };
+  PD.draw = { rr, poly, OUTLINE };
 })();

@@ -90,9 +90,9 @@ PD.Fx = class Fx {
     shot.img.setFrame(frame).setPosition(x0, y0).setTint(color).setVisible(true).setAlpha(1);
     shot.img.setRotation(Math.atan2(y1 - y0, x1 - x0));
     shot.img.setOrigin(isVine ? 0 : 0.5, 0.5);
-    shot.img.setScale(fx === 'fire' ? 0.3 : PD.TEX_SCALE);
+    shot.img.setScale(fx === 'fire' ? 0.6 * PD.TEX_SCALE : PD.TEX_SCALE);
     if (fx === 'water') shot.img.setRotation(Math.atan2(y1 - y0, x1 - x0) + Math.PI / 2);
-    shot.glow.setPosition(x0, y0).setTint(color).setScale(isVine ? 0.01 : 0.45).setAlpha(0.8).setVisible(!isVine);
+    shot.glow.setPosition(x0, y0).setTint(color).setScale((isVine ? 0.02 : 0.9) * PD.TEX_SCALE).setAlpha(0.8).setVisible(!isVine);
   }
 
   impact(fx, x, y) {
@@ -192,8 +192,8 @@ PD.Fx = class Fx {
     const x = s.x0 + (s.x1 - s.x0) * k;
     const y = s.y0 + (s.y1 - s.y0) * k;
     if (s.fx === 'vine') {
-      // 藤鞭圖在大圖上寬 200 像素；揮出再收回
-      const fullScale = Math.hypot(s.x1 - s.x0, s.y1 - s.y0) / 200;
+      // 藤鞭圖的邏輯寬度是 100；揮出再收回
+      const fullScale = (Math.hypot(s.x1 - s.x0, s.y1 - s.y0) / 100) * PD.TEX_SCALE;
       s.img.scaleX = Math.max(0.01, fullScale * Math.sin(k * Math.PI));
     } else {
       s.img.setPosition(x, y);

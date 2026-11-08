@@ -2,9 +2,6 @@
 window.PD = window.PD || {};
 PD.settings = { reduceFx: false };
 
-// 畫面內部解析度：裝置像素比最多 2
-PD.RES = Math.min(window.devicePixelRatio || 1, 2);
-
 PD.setupCamera = function (scene) {
   scene.cameras.main.setOrigin(0, 0).setZoom(PD.RES);
 };
@@ -20,6 +17,7 @@ PD.BootScene = class BootScene extends Phaser.Scene {
   create() {
     PD.buildAtlas(this, PD.config);
     PD.buildBackground(this, PD.config, PD.config.levels[0]);
+    PD.buildPanel(this);
     this.scene.start('Start');
   }
 };
@@ -34,7 +32,7 @@ PD.StartScene = class StartScene extends Phaser.Scene {
     this.add.image(L.width / 2, L.height / 2, 'atlas', 'white')
       .setDisplaySize(L.width + 40, L.height + 40).setTint(0x101a24).setAlpha(0.5);
     this.add.image(L.width / 2, 230, 'atlas', 'glow')
-      .setBlendMode(Phaser.BlendModes.ADD).setTint(0xffd84a).setScale(7, 2.4).setAlpha(0.35);
+      .setBlendMode(Phaser.BlendModes.ADD).setTint(0xffd84a).setScale(14 * PD.TEX_SCALE, 4.8 * PD.TEX_SCALE).setAlpha(0.35);
     PD.txt(this, L.width / 2, 230, PD.names.game, 76, '#ffe9a8', 9);
     PD.txt(this, L.width / 2, 340, PD.text.teamComing, 32);
     PD.txt(this, L.width / 2, 420, PD.text.tapToStart, 30, '#ffffff');
@@ -86,9 +84,11 @@ PD.updateTurnHint();
   window.__game = new Phaser.Game({
     type: Phaser.WEBGL,
     parent: 'game',
-    width: L.width * PD.RES,
-    height: L.height * PD.RES,
+    width: Math.round(L.width * PD.RES),
+    height: Math.round(L.height * PD.RES),
     backgroundColor: '#16261c',
+    // 貼圖用平滑過濾；貼圖已是一比一，不需要多重取樣和縮圖鏈，省下 iPad 的記憶體
+    render: { antialias: true, antialiasGL: false, roundPixels: false, powerPreference: 'high-performance' },
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
     audio: { noAudio: true },
     banner: false,

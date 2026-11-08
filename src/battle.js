@@ -80,13 +80,14 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     const L = this.L;
     this.orbIcon = PD.img(this, L.orbCounter.x, L.orbCounter.y, 'orb').setDepth(400);
     this.orbGlow = this.add.image(L.orbCounter.x, L.orbCounter.y, 'atlas', 'glow').setDepth(399)
-      .setBlendMode(Phaser.BlendModes.ADD).setTint(0xffd84a).setScale(0.8).setAlpha(0.6);
+      .setBlendMode(Phaser.BlendModes.ADD).setTint(0xffd84a).setScale(1.6 * PD.TEX_SCALE).setAlpha(0.6);
     this.ballText = PD.txt(this, L.orbCounter.x + 32, L.orbCounter.y, '', 38, '#ffe9a8', 5)
       .setOrigin(0, 0.5).setDepth(400);
     this.ballBump = 0;
 
     this.rescueIcons = [];
     const n = this.sim.mode.rescues;
+    PD.img(this, L.rescue.x - 25 + (n * 30 + 20) / 2, L.rescue.y, 'plateRescue_' + n).setDepth(399);
     for (let i = 0; i < n; i++) {
       this.rescueIcons.push(PD.img(this, L.rescue.x + i * 30, L.rescue.y, 'shield').setDepth(400));
     }
@@ -115,10 +116,10 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
       const unlocked = this.sim.isUnlocked(kind);
       const glow = PD.img(this, cx, cy, 'cardGlow').setDepth(399).setTint(0xfff176)
         .setBlendMode(Phaser.BlendModes.ADD).setVisible(false);
-      const bg = PD.img(this, cx, cy, unlocked ? 'card' : 'cardLocked').setDepth(400);
+      const bg = PD.img(this, cx, cy, unlocked ? 'card_' + kind : 'cardLocked').setDepth(400);
       // 價格徽章在左上角、角色圖靠右，兩者不重疊；鎖住的卡沒有徽章，圖放中間
-      const picX = unlocked ? x + 104 : cx;
-      const pic = PD.img(this, picX, C.y + 46, 'unit_' + kind).setDepth(401).setScale(PD.TEX_SCALE * 0.72);
+      const picX = unlocked ? x + 102 : cx;
+      const pic = PD.img(this, picX, C.y + 47, 'cardPic_' + kind).setDepth(401);
       const name = PD.txt(this, cx, C.y + 102, PD.names[kind], 20, '#2a2a2a', 0).setDepth(402);
       const badge = PD.img(this, x + 39, C.y + 25, 'costBadge').setDepth(402).setTint(0xd2571a);
       const coin = PD.img(this, x + 17, C.y + 25, 'orb').setDepth(403).setScale(PD.TEX_SCALE * 0.4);
@@ -156,15 +157,17 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     let v = this.actorPool.pop();
     if (!v) {
       const c = this.add.container(0, 0);
+      const shadow = PD.img(this, 0, -1, 'shadow');
       const body = PD.img(this, 0, 0, 'white').setOrigin(0.5, 1);
       const label = PD.txt(this, 0, 0, '', 14, '#ffffff', 3);
       const hpBack = PD.img(this, 0, 0, 'hpBack');
       const hpFill = PD.img(this, 0, 0, 'hpFill').setOrigin(0, 0.5);
       const burn = PD.img(this, 0, 0, 'iconBurn');
       const slow = PD.img(this, 0, 0, 'iconSlow');
-      c.add([body, label, hpBack, hpFill, burn, slow]);
-      v = { c, body, label, hpBack, hpFill, burn, slow, kindClass: 'actor' };
+      c.add([shadow, body, label, hpBack, hpFill, burn, slow]);
+      v = { c, shadow, body, label, hpBack, hpFill, burn, slow, kindClass: 'actor' };
     }
+    v.shadow.setScale(PD.TEX_SCALE * (size.w * 1.15) / 96, PD.TEX_SCALE * 0.9);
     Object.assign(v, {
       id, active: true, w: size.w, h: size.h, isEnemy, foot, seen: true,
       flash: 0, atk: 0, land: 0, dying: 0, gone: false, defeated: false, homed: false, seed: id * 1.7, emberT: 0,
@@ -186,7 +189,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     let v = this.orbPool.pop();
     if (!v) {
       const c = this.add.container(0, 0).setDepth(300);
-      const glow = this.add.image(0, 0, 'atlas', 'glow').setBlendMode(Phaser.BlendModes.ADD).setTint(0xffd84a).setScale(0.8);
+      const glow = this.add.image(0, 0, 'atlas', 'glow').setBlendMode(Phaser.BlendModes.ADD).setTint(0xffd84a).setScale(1.6 * PD.TEX_SCALE);
       const orb = PD.img(this, 0, 0, 'orb');
       c.add([glow, orb]);
       v = { c, glow, orb, kindClass: 'orb' };
