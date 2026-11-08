@@ -61,6 +61,7 @@ window.PD = window.PD || {};
     recallDone: (name) => `${name}回家休息了，球還給你`,
     recallNone: '場上還沒有朋友',
     turnDevice: '請把 iPad 轉成橫向',
+    speedLabel: (n) => `${n}×`,
   };
 
   // ===== 版面（基準畫面 1180×820）=====
@@ -75,7 +76,8 @@ window.PD = window.PD || {};
     topBar: { h: 80 },
     orbCounter: { x: 40, y: 40 },
     rescue: { x: 214, y: 40 },
-    hint: { x: 680, y: 40 },
+    hint: { x: 646, y: 40 },
+    speedBtn: { x: 920, y: 4, w: 72, h: 72 },
     muteBtn: { x: 1008, y: 4, w: 72, h: 72 },
     pauseBtn: { x: 1096, y: 4, w: 72, h: 72 },
     cards: { x: 20, y: 676, w: 136, h: 120, gap: 10 },
@@ -141,16 +143,23 @@ window.PD = window.PD || {};
       tutorial: { trainer: { lane: 1, col: 1 }, basicShooter: { lane: 1, col: 6 } },
       // 只影響這一關的調整，理由記在 CLAUDE.md「第 1 關平衡」
       tune: {
-        startBalls: fast ? 1500 : 250,
         skyOrbEvery: 8,
         genEvery: 8,
-        enemies: { scout: { hp: 3, secPerCell: 9 } },
+        // 走速以小兵 9 → 6.5 秒為準，其他敵人照同樣比例（約 0.72 倍）
+        enemies: {
+          scout: { secPerCell: 6.5 },
+          tough: { secPerCell: 5.8 },
+          runner: { secPerCell: 3.6 },
+          armored: { secPerCell: 7.2 },
+        },
       },
       script: [
-        { t: 12, wave: 1, lane: 1, kind: 'scout' },
-        { t: 32, wave: 1, lane: 1, kind: 'scout' },
+        { t: 10, wave: 1, lane: 1, kind: 'scout' },
+        { t: 22, wave: 1, lane: 1, kind: 'scout' },
+        { t: 34, wave: 1, lane: 1, kind: 'scout' },
+        { t: 46, wave: 2, lane: 1, kind: 'scout' },
         { t: 54, wave: 2, lane: 1, kind: 'scout' },
-        { t: 76, wave: 2, lane: 1, kind: 'scout' },
+        { t: 62, wave: 2, lane: 1, kind: 'scout' },
       ],
     },
   ];
@@ -164,6 +173,7 @@ window.PD = window.PD || {};
   PD.text = text;
   PD.config = {
     layout, units, cardOrder, enemies, levels, modes,
+    speedSteps: [1, 2, 3], // 速度鈕循環的倍率
     rules: {
       tickSeconds: 0.05,
       spawnX: 11, villageX: 0.5,

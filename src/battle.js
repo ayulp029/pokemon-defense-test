@@ -26,7 +26,10 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     this.recallTargetId = 0;
     this.recallArmedAt = 0;
     this.hintKey = '';
-    this.clock = 0;
+    this.clock = 0; // 真實時間：防手抖、按鈕閃爍用，不跟著速度鈕變快
+    this.worldClock = 0; // 戰場時間：角色與特效的動畫用，跟著速度鈕變快
+    this.speedIndex = 0;
+    this.hintSwapTick = 0;
     this.restoring = false;
     this.fpsTime = 0; this.fpsFrames = 0; this.lowFor = 0;
 
@@ -105,6 +108,9 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     };
     this.muteIcon = squareBtn(L.muteBtn, PD.Sound.icon);
     squareBtn(L.pauseBtn, 'iconPause');
+    PD.img(this, L.speedBtn.x + L.speedBtn.w / 2, L.speedBtn.y + L.speedBtn.h / 2, 'btnSquare').setDepth(400);
+    this.speedText = PD.txt(this, L.speedBtn.x + L.speedBtn.w / 2, L.speedBtn.y + L.speedBtn.h / 2,
+      PD.text.speedLabel(this.gameSpeed), 34).setDepth(401);
 
     if (this.cfg.debug.dev) {
       this.fpsText = PD.txt(this, 1140, 110, '', 18).setDepth(450);
@@ -233,10 +239,13 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     if (this.pausedBy) return;
     const dt = Math.min(delta, 100) / 1000;
     this.clock += dt;
-    this.frameDt = dt;
+    // 跳出提示或結算時戰鬥已停，慶祝動畫維持正常速度
+    const worldDt = dt * (this.overlay.visible ? 1 : this.gameSpeed);
+    this.worldClock += worldDt;
+    this.frameDt = worldDt;
     const sim = this.sim;
     if (!this.overlay.visible) {
-      this.accum += dt * this.cfg.debug.timeScale;
+      this.accum += dt * this.cfg.debug.timeScale * this.gameSpeed;
       const tick = this.cfg.rules.tickSeconds;
       while (this.accum >= tick) {
         this.accum -= tick;
@@ -244,9 +253,13 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
       }
     }
     this.drainEvents();
+    if (this.hintSwapTick && sim.state.tick >= this.hintSwapTick) {
+      this.hintSwapTick = 0;
+      if (this.hintText.text === PD.text.autoCollect) this.showHint(PD.text.inRangeHint);
+    }
     this.syncViews(this.accum / this.cfg.rules.tickSeconds);
     this.updateHud(dt);
-    this.fx.update(dt);
+    this.fx.update(worldDt);
     this.updateQuality(delta);
   }
 
@@ -271,9 +284,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
         break;
       case 'battleStart':
         this.showHint(PD.text.autoCollect);
-        this.time.delayedCall(4000 / this.cfg.debug.timeScale, () => {
-          if (this.hintText.text === PD.text.autoCollect) this.showHint(PD.text.inRangeHint);
-        });
+        this.hintSwapTick = this.sim.state.tick + this.sim.ticks(4);
         break;
       case 'wave':
         if (this.sim.mode.autoWaveHint) this.showWaveHint(ev);
@@ -336,6 +347,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
         this.exitRecall();
         this.setSelected(null);
         this.accum = 0;
+        this.hintSwapTick = 0;
         this.refreshPrepHint();
         break;
       default: break;
@@ -420,7 +432,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     if (v.kindClass === 'orb') { this.releaseView(index); return true; }
     if (v.defeated) {
       if (v.dying === 0) { v.dying = 0.13; return false; }
-      v.dying -= 1 / 60;
+      v.dying -= this.frameDt;
       if (v.dying > 0) return false;
       this.fx.starBurst(v.c.x, v.c.y - v.h * 0.5);
       PD.Sound.play('star');
@@ -431,9 +443,9 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     if (v.gone) {
       // 揮手休息：往上飄並輕輕左右擺
       if (v.dying === 0) v.dying = 0.6;
-      v.dying -= 1 / 60;
+      v.dying -= this.frameDt;
       v.c.rotation = Math.sin(v.dying * 18) * 0.15;
-      v.c.y -= 0.7;
+      v.c.y -= 42 * this.frameDt;
       v.c.alpha = Math.max(0, v.dying / 0.6);
       if (v.dying > 0) return false;
       this.releaseView(index);
@@ -565,7 +577,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
       f.setVisible(show);
       if (!show) continue;
       const S = FLAME_SPOTS[i];
-      const k = 1 + Math.sin(this.clock * (11 + i * 3) + v.seed + i * 2) * 0.18;
+      const k = 1 + Math.sin(this.worldClock * (11 + i * 3) + v.seed + i * 2) * 0.18;
       f.setPosition(offX + S[0] * v.w, offY + S[1] * v.h)
         .setScale(PD.TEX_SCALE * S[2] * (2 - k), PD.TEX_SCALE * S[2] * k);
     }
@@ -576,7 +588,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     let sx = 1;
     let sy = 1;
     v.walking = walking;
-    const P = PD.Anim.compute(v, style, charge, dt, this.clock, this.cfg.debug.timeScale, this.fx.reduced);
+    const P = PD.Anim.compute(v, style, charge, dt, this.worldClock, this.cfg.debug.timeScale, this.fx.reduced);
     sx += P.sx; sy += P.sy;
     const rot = P.r;
     let offX = P.x;
@@ -626,8 +638,8 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     const topY = o.source === 'sky' ? this.L.grid.y - 10 : landY - 60;
     const x = this.ruleToX(o.x);
     v.c.setPosition(x, topY + (landY - topY) * (1 - (1 - k) * (1 - k)));
-    v.orb.setY(k >= 1 ? Math.sin(this.clock * 4 + o.id) * 3 : 0);
-    v.glow.setAlpha(k >= 1 ? 0.55 + Math.sin(this.clock * 5 + o.id) * 0.2 : 0.3);
+    v.orb.setY(k >= 1 ? Math.sin(this.worldClock * 4 + o.id) * 3 : 0);
+    v.glow.setAlpha(k >= 1 ? 0.55 + Math.sin(this.worldClock * 5 + o.id) * 0.2 : 0.3);
     v.landX = x; v.landY = landY;
     v.collectable = o.age >= fall;
   }
@@ -837,6 +849,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     const L = this.L;
     if (PD.hitRect(L.pauseBtn, x, y)) { PD.Sound.play('tap'); this.freeze('user'); return; }
     if (PD.hitRect(L.muteBtn, x, y)) { this.toggleMute(); return; }
+    if (PD.hitRect(L.speedBtn, x, y)) { this.cycleSpeed(); return; }
     if (PD.hitRect(L.cancelBtn, x, y)) { PD.Sound.play('tap'); this.exitRecall(); this.setSelected(null); return; }
     if (PD.hitRect(L.recallBtn, x, y)) {
       PD.Sound.play('tap');
@@ -891,6 +904,14 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     }
     if (!this.selected) { this.showHint(PD.text.pickCardFirst); return; }
     this.sim.command({ type: 'place', kind: this.selected, lane, col });
+  }
+
+  get gameSpeed() { return this.cfg.speedSteps[this.speedIndex]; }
+
+  cycleSpeed() {
+    this.speedIndex = (this.speedIndex + 1) % this.cfg.speedSteps.length;
+    this.speedText.setText(PD.text.speedLabel(this.gameSpeed));
+    PD.Sound.play('tap');
   }
 
   toggleMute() {
