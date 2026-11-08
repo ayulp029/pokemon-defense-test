@@ -344,7 +344,7 @@ window.PD = window.PD || {};
     c.fillRect(0, 0, L.width, 1.5);
 
     inset(c, 6, 10, 172, 60, 16);        // 球數
-    inset(c, 367, 12, 625, 56, 16);      // 提示句
+    inset(c, L.hintPlate.x, L.hintPlate.y, L.hintPlate.w, L.hintPlate.h, 16); // 提示句
 
     c.fillStyle = vGrad(c, fieldBottom, L.height, ['#39543f', '#1f3228']);
     c.fillRect(0, fieldBottom, L.width, L.height - fieldBottom);

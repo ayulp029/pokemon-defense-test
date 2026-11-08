@@ -340,7 +340,7 @@ PD.TEX_SCALE = 1 / PD.RES;
         c.fillStyle = 'rgba(255,255,255,0.75)'; c.fill();
       });
     });
-    btnFrame('btnSquare', 72, 72, '#5a7a9a', '#3c566f');
+    btnFrame('btnSquare', cfg.layout.muteBtn.w, cfg.layout.muteBtn.h, '#5a7a9a', '#3c566f');
     btnFrame('btnBig', 260, 130, '#ffcf5a', '#f09a2e');
     btnFrame('btnWide', 300, 92, '#ffcf5a', '#f09a2e');
     btnFrame('cardLocked', 136, 120, '#8d97a3', '#6a7480');

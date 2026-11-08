@@ -76,10 +76,12 @@ window.PD = window.PD || {};
     topBar: { h: 80 },
     orbCounter: { x: 40, y: 40 },
     rescue: { x: 214, y: 40 },
-    hint: { x: 646, y: 40 },
-    speedBtn: { x: 920, y: 4, w: 72, h: 72 },
-    muteBtn: { x: 1008, y: 4, w: 72, h: 72 },
-    pauseBtn: { x: 1096, y: 4, w: 72, h: 72 },
+    hint: { x: 625, y: 40 },
+    hintPlate: { x: 340, y: 12, w: 570, h: 56 }, // 右端 910，留 8 的間距給速度鈕
+    // 78 ÷ 1180 × 1024 ≈ 67.7 點：在 1024×768 的 iPad 上仍大於 64 點；三顆一樣大、間距 10
+    speedBtn: { x: 918, y: 1, w: 78, h: 78 },
+    muteBtn: { x: 1006, y: 1, w: 78, h: 78 },
+    pauseBtn: { x: 1094, y: 1, w: 78, h: 78 },
     cards: { x: 20, y: 676, w: 136, h: 120, gap: 10 },
     cancelBtn: { x: 1040, y: 676, w: 120, h: 120 },
     recallBtn: { x: 896, y: 676, w: 136, h: 120 },
@@ -167,7 +169,8 @@ window.PD = window.PD || {};
   ];
 
   const modes = {
-    together: { speedMul: 0.75, rescues: 5, autoWaveHint: true },
+    // 宇鋒 2026-11-08 要求稍難（原本 0.75 倍、5 次），理由與試玩數據見 CLAUDE.md
+    together: { speedMul: 0.75, rescues: 3, autoWaveHint: true },
     solo: { speedMul: 1, rescues: 3, autoWaveHint: false },
   };
 
