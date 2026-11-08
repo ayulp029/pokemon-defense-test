@@ -13,6 +13,10 @@ PD.BootScene = class BootScene extends Phaser.Scene {
   preload() {
     [...PD.config.cardOrder, ...Object.keys(PD.config.enemies)]
       .forEach((k) => this.load.image('art_' + k, 'assets/local-art/' + k + '.png'));
+    // 待機動畫只載入事先確認存在的檔案（見下方 probeIdleSheets）
+    Object.keys(PD.idleSheetFound).forEach((k) => {
+      this.load.image('idle_' + k, 'assets/local-art/' + PD.config.units[k].idleSheet.file + '.png');
+    });
   }
 
   create() {
@@ -62,6 +66,8 @@ PD.StartScene = class StartScene extends Phaser.Scene {
 
   go(mode) {
     PD.Sound.unlock();
+    PD.Sound.startMusic();
+    PD.Sound.play('tap');
     this.scene.start('Battle', { mode });
   }
 };
@@ -80,7 +86,25 @@ PD.updateTurnHint = function () {
 window.addEventListener('resize', PD.updateTurnHint);
 PD.updateTurnHint();
 
-(function () {
+// 本機限定的待機圖：先問伺服器有沒有這個檔案，沒有就不載入（公開版沒有這個檔）。
+// 網路出問題或太久沒回應也當作沒有，退回靜態貼圖，不擋住遊戲啟動。
+PD.idleSheetFound = {};
+PD.probeIdleSheets = function () {
+  const units = PD.config.units;
+  const checks = Object.keys(units).filter((k) => units[k].idleSheet).map((k) => {
+    const abort = new AbortController();
+    const timer = setTimeout(() => abort.abort(), 2000);
+    return fetch('assets/local-art/' + units[k].idleSheet.file + '.png', { method: 'HEAD', cache: 'no-store', signal: abort.signal })
+      .then((res) => {
+        if (res.ok && (res.headers.get('content-type') || '').startsWith('image/')) PD.idleSheetFound[k] = true;
+      })
+      .catch(() => {})
+      .then(() => clearTimeout(timer));
+  });
+  return Promise.all(checks);
+};
+
+PD.probeIdleSheets().then(function () {
   const L = PD.config.layout;
   window.__game = new Phaser.Game({
     type: Phaser.WEBGL,
@@ -95,4 +119,4 @@ PD.updateTurnHint();
     banner: false,
     scene: [PD.BootScene, PD.StartScene, PD.BattleScene],
   });
-})();
+});

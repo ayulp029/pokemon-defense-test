@@ -57,35 +57,44 @@ PD.Anim = (function () {
     },
 
     // ===== 敵人：facing -1 代表面朝左，「往前」會自動換成往左 =====
-    // 基本敵人：一步一步走，碰到角色時後拉再往前推
+    // walk 的欄位：speed 步伐快慢、hop 跳多高、hopPow 跳的手感（小於 1 彈、大於 1 貼地）、
+    // stretch／squash 騰空拉長與落地壓扁、tilt 左右傾、sway 左右位移、twist 身體扭動、lean 前傾、dust 塵土大小
+    // 基本敵人：穩定的一步一步走，後仰蓄力再往前撲
     scout: {
-      facing: -1, idle: { speed: 2.4, amp: 0.025, sway: 0.01 }, walk: { speed: 7, hop: 4, tilt: 0.03 },
-      windup: 0.3, charge: pose(0.06, -0.08, -0.12, -4, 0),
-      snap: 0.07, dur: 0.4, strike: pose(-0.04, 0.06, 0.18, 10, 0),
+      facing: -1, idle: { speed: 2.4, amp: 0.025, sway: 0.01 },
+      walk: { speed: 7, hop: 4, hopPow: 1, stretch: 0.02, squash: 0.05, tilt: 0.04, sway: 1, twist: 0, lean: 0, dust: 1 },
+      windup: 0.42, charge: pose(0.06, -0.09, -0.22, -8, 0),
+      snap: 0.07, dur: 0.44, strike: pose(-0.06, 0.08, 0.26, 16, -3),
       hurt: ENEMY_HURT,
     },
-    // 生命較高的敵人：貼地滑行，幾乎不跳，左右搖擺大一點；攻擊時身體伸長
+    // 生命較高的敵人：貼地蛇形，身體左右扭動；攻擊時身體伸長
     tough: {
-      facing: -1, idle: { speed: 2.0, amp: 0.03, sway: 0.016 }, walk: { speed: 5, hop: 1.5, tilt: 0.06 },
-      windup: 0.34, charge: pose(0.1, -0.12, -0.14, -5, 0),
-      snap: 0.07, dur: 0.42, strike: pose(0.12, -0.08, 0.2, 12, 0),
+      facing: -1, idle: { speed: 2.0, amp: 0.03, sway: 0.016 },
+      walk: { speed: 5, hop: 0.8, hopPow: 1, stretch: 0, squash: 0, tilt: 0.1, sway: 7, twist: 0.05, lean: 0, dust: 0.7 },
+      windup: 0.46, charge: pose(0.1, -0.14, -0.24, -9, 0),
+      snap: 0.07, dur: 0.46, strike: pose(0.16, -0.1, 0.24, 18, 0),
       hurt: ENEMY_HURT,
     },
-    // 走得快的敵人：小步快跑，身體前傾；攻擊短促
+    // 走得快的敵人：快步又帶跳躍感，身體前傾；攻擊短促
     runner: {
-      facing: -1, idle: { speed: 3.2, amp: 0.028, sway: 0.012 }, walk: { speed: 12, hop: 6, tilt: 0.05 },
-      windup: 0.22, charge: pose(0.1, -0.12, -0.08, -4, 0),
-      snap: 0.05, dur: 0.3, strike: pose(-0.08, 0.1, 0.18, 12, 0),
+      facing: -1, idle: { speed: 3.2, amp: 0.028, sway: 0.012 },
+      walk: { speed: 13, hop: 9, hopPow: 0.7, stretch: 0.08, squash: 0.12, tilt: 0.04, sway: 0, twist: 0, lean: 0.09, dust: 0.8 },
+      windup: 0.3, charge: pose(0.12, -0.15, -0.16, -6, 0),
+      snap: 0.05, dur: 0.34, strike: pose(-0.1, 0.12, 0.24, 18, -8),
       hurt: ENEMY_HURT,
     },
-    // 高生命敵人：走得又慢又重，被打時穩穩抖一下
+    // 高生命敵人：走得又慢又重，左右搖晃，落地時壓一下
     armored: {
-      facing: -1, idle: { speed: 1.4, amp: 0.03, sway: 0.006 }, walk: { speed: 4, hop: 2, tilt: 0.02 },
-      windup: 0.4, charge: pose(0.05, -0.06, -0.08, -5, 0),
-      snap: 0.09, dur: 0.5, strike: pose(-0.03, 0.05, 0.12, 9, 0),
+      facing: -1, idle: { speed: 1.4, amp: 0.03, sway: 0.006 },
+      walk: { speed: 3.2, hop: 1.5, hopPow: 2, stretch: 0, squash: 0.09, tilt: 0.07, sway: 2, twist: 0, lean: 0, dust: 1.5 },
+      windup: 0.55, charge: pose(0.05, -0.08, -0.16, -8, 0),
+      snap: 0.1, dur: 0.56, strike: pose(-0.04, 0.06, 0.18, 14, 0),
       hurt: { dur: 0.3, kick: -3, jitter: 2, tilt: 0.04, squash: 0.08 },
     },
   };
+
+  // 被擋住時的煞車：身體往前晃一下再站穩
+  const BRAKE = { dur: 0.26, tilt: 0.1, squash: 0.08, x: 3 };
 
   // 下面兩個是共用的輸出物件，呼叫端要馬上讀走
   const out = pose(0, 0, 0, 0, 0);
@@ -113,6 +122,8 @@ PD.Anim = (function () {
 
     hurt(v, st) { v.hurtT = st.hurt.dur; },
 
+    brake(v) { v.stopT = BRAKE.dur; },
+
     // 彈道的起點：沿用原本的手部位置，再算上出手姿勢的傾斜與位移
     muzzle(v, strike) {
       const fx = v.w * 0.4;
@@ -130,7 +141,7 @@ PD.Anim = (function () {
       P.sx = 0; P.sy = 0; P.r = 0; P.x = 0; P.y = 0;
 
       if (v.relT >= 0) {
-        v.relT += dt * speed;
+        v.relT += dt * speed * v.actRate;
         const t = v.relT;
         const S = v.relStrike;
         if (t >= v.relDur) {
@@ -180,16 +191,46 @@ PD.Anim = (function () {
       }
 
       // 待機呼吸：吸氣變高時身體略窄，看起來像真的在呼吸，不是單純放大
-      const t = clock * st.idle.speed + v.seed;
-      const breath = Math.sin(t) * st.idle.amp;
-      P.sy += breath;
-      P.sx -= breath * 0.6;
-      P.r += Math.sin(t * 0.5) * st.idle.sway;
+      // 用累積的相位而不是時鐘，變慢時動作才會接續放慢，不會跳格
+      // 有逐格待機圖的角色，呼吸已經畫在圖裡，這裡就不再疊一次
+      if (!v.idleFrames) {
+        v.breath += dt * st.idle.speed * v.actRate;
+        const t = v.breath + v.seed;
+        const breath = Math.sin(t) * st.idle.amp;
+        P.sy += breath;
+        P.sx -= breath * 0.6;
+        P.r += Math.sin(t * 0.5) * st.idle.sway;
+      }
 
-      if (st.walk && v.walking) {
-        const w = clock * st.walk.speed + v.seed;
-        P.y -= Math.abs(Math.sin(w)) * st.walk.hop;
-        P.r += Math.sin(w) * st.walk.tilt;
+      if (st.walk) {
+        const W = st.walk;
+        v.walkBlend = v.walking ? Math.min(1, v.walkBlend + dt * 8) : Math.max(0, v.walkBlend - dt * 8);
+        if (v.walking) {
+          v.walkPhase += dt * speed * W.speed * v.walkRate;
+          const step = Math.floor(v.walkPhase / Math.PI);
+          if (step !== v.walkStep) { v.walkStep = step; v.stepped = true; }
+        }
+        const b = v.walkBlend;
+        if (b > 0) {
+          const s = Math.sin(v.walkPhase);
+          const lift = Math.abs(s);
+          const ground = (1 - lift) * (1 - lift) * (1 - lift);
+          const stretch = W.stretch * lift - W.squash * ground;
+          P.y -= Math.pow(lift, W.hopPow) * W.hop * b;
+          P.sy += stretch * b;
+          P.sx += (-stretch * 0.7 + Math.sin(v.walkPhase * 2) * W.twist) * b;
+          P.r += (s * W.tilt + W.lean) * b;
+          P.x += Math.cos(v.walkPhase) * W.sway * b;
+        }
+      }
+      if (v.stopT > 0) {
+        v.stopT -= dt;
+        const k = Math.max(0, v.stopT / BRAKE.dur);
+        const swing = Math.sin(k * Math.PI);
+        P.r += swing * BRAKE.tilt;
+        P.x += swing * BRAKE.x;
+        P.sx += BRAKE.squash * k;
+        P.sy -= BRAKE.squash * k;
       }
       if (st.facing === -1) { P.x = -P.x; P.r = -P.r; }
       return P;

@@ -8,6 +8,9 @@ PD.Fx = class Fx {
     this.cfg = cfg;
     this.quality = 1;
     this.lastShake = -99999;
+    // 共用的參數物件：emit 只讀不留，發粒子時不用每次新建
+    this.ambientOpt = { vx: 0, vy: 0, g: 0, life: 1, s0: 1, s1: 1, a: 1 };
+    this.burstOpt = { vx: 0, vy: 0, g: 0, life: 1, s0: 1, s1: 1, spin: 0 };
 
     this.particles = [];
     this.freeParticles = [];
@@ -62,14 +65,43 @@ PD.Fx = class Fx {
 
   burst(frame, x, y, color, count, speed, life, s0, s1, g) {
     const n = this.amount(count);
+    const o = this.burstOpt;
+    o.g = g || 0; o.s0 = s0; o.s1 = s1;
     for (let i = 0; i < n; i++) {
       const a = Math.random() * Math.PI * 2;
       const sp = speed * (0.4 + Math.random() * 0.8);
-      this.emit(frame, x, y, color, {
-        vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, g: g || 0,
-        life: life * (0.6 + Math.random() * 0.6), s0, s1, spin: (Math.random() - 0.5) * 8,
-      });
+      o.vx = Math.cos(a) * sp; o.vy = Math.sin(a) * sp;
+      o.life = life * (0.6 + Math.random() * 0.6);
+      o.spin = (Math.random() - 0.5) * 8;
+      this.emit(frame, x, y, color, o);
     }
+  }
+
+  // 背景粒子：有數量上限，共用同一個參數物件，不會每次新建
+  ambient(frame, x, y, color, vx, vy, g, life, s0, s1, a) {
+    if (this.particles.length - this.freeParticles.length >= this.cfg.fx.ambientMaxUsed) return;
+    const q = this.reduced ? Math.min(this.quality, 0.35) : this.quality;
+    if (Math.random() > q) return;
+    const o = this.ambientOpt;
+    o.vx = vx; o.vy = vy; o.g = g; o.life = life; o.s0 = s0; o.s1 = s1; o.a = a;
+    this.emit(frame, x, y, color, o);
+  }
+
+  // 腳下塵土：往敵人身後（右邊）飄，不蓋住前方的接觸點；減少特效時不出現
+  dust(x, y, size) {
+    if (this.reduced) return;
+    this.ambient('spark', x + (Math.random() - 0.5) * 8, y - 2 - Math.random() * 3, 0xe6d3a8,
+      18 + Math.random() * 22, -14 - Math.random() * 14, 0, 0.32, 0.55 * size, 1.15 * size, 0.42);
+  }
+
+  ember(x, y) { this.ambient('spark', x, y, 0xff9a3c, 0, -30, 0, 0.35, 0.6, 0.1, 1); }
+
+  drip(x, y) { this.ambient('dropP', x, y, 0x7fd4ff, 0, 20, 260, 0.4, 0.5, 0.25, 0.9); }
+
+  // 敵人碰到角色時的小星星（不用爆炸或閃光）
+  contactHit(x, y) {
+    this.glowPop(x, y, 0xfff1a8, 0.45, 0.14);
+    this.burst('star', x, y, 0xffe36b, this.cfg.fx.contactStars, 120, 0.3, 0.45, 0.1, 120);
   }
 
   glowPop(x, y, color, size, life) {
@@ -199,15 +231,17 @@ PD.Fx = class Fx {
       s.img.setPosition(x, y);
       s.glow.setPosition(x, y);
       if (s.fx === 'fire' && Math.random() < this.amount(10) / 10) {
-        this.emit('spark', x, y, 0xffa040, {
-          vx: (Math.random() - 0.5) * 40, vy: -40 - Math.random() * 40, life: 0.25, s0: 0.7, s1: 0.1,
-        });
+        const o = this.ambientOpt;
+        o.vx = (Math.random() - 0.5) * 40; o.vy = -40 - Math.random() * 40; o.g = 0;
+        o.life = 0.25; o.s0 = 0.7; o.s1 = 0.1; o.a = 1;
+        this.emit('spark', x, y, 0xffa040, o);
       }
     }
     if (!s.landed && k >= (s.fx === 'vine' ? 0.5 : 1)) {
       s.landed = true;
       this.impact(s.fx, s.x1, s.y1);
       if (alive) {
+        PD.Sound.play('hit');
         s.view.flash = 0.1;
         PD.Anim.hurt(s.view, PD.Anim.styleOf(s.view.kind));
       }

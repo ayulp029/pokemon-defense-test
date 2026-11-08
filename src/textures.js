@@ -366,6 +366,10 @@ PD.TEX_SCALE = 1 / PD.RES;
       speaker(c); c.strokeStyle = '#fff'; c.lineWidth = 3;
       c.beginPath(); c.arc(21, 18, 10, -0.8, 0.8); c.stroke();
     });
+    add('iconSoundLow', 36, 36, (c) => {
+      speaker(c); c.strokeStyle = '#fff'; c.lineWidth = 3;
+      c.beginPath(); c.arc(19, 18, 6, -0.8, 0.8); c.stroke();
+    });
     add('iconMute', 36, 36, (c) => {
       speaker(c); c.strokeStyle = '#fff'; c.lineWidth = 3.5;
       c.beginPath(); c.moveTo(24, 12); c.lineTo(34, 24); c.moveTo(34, 12); c.lineTo(24, 24); c.stroke();
@@ -381,6 +385,21 @@ PD.TEX_SCALE = 1 / PD.RES;
       add('unit_' + k, d.size.w, d.size.h, (c) => (
         art ? drawArt(c, d.size.w, d.size.h, art) : drawUnit(c, d.size.w, d.size.h, d)
       ));
+      // 本機待機動畫：每一格都畫進大圖，播放時只換格，不用額外的繪圖切換
+      if (d.idleSheet && scene.textures.exists('idle_' + k)) {
+        const sheet = scene.textures.get('idle_' + k).getSourceImage();
+        const n = d.idleSheet.frames;
+        const fw = Math.floor(sheet.width / n);
+        for (let i = 0; i < n; i++) {
+          add('unit_' + k + '_idle' + i, d.size.w, d.size.h, (c) => {
+            const one = document.createElement('canvas');
+            one.width = fw;
+            one.height = sheet.height;
+            one.getContext('2d').drawImage(sheet, i * fw, 0, fw, sheet.height, 0, 0, fw, sheet.height);
+            drawArt(c, d.size.w, d.size.h, one);
+          });
+        }
+      }
       // 卡片頭像另外畫成剛好的大小，不靠遊戲中再縮小
       add('cardPic_' + k, 60, 78, (c) => {
         if (art) { drawArt(c, 60, 78, art); return; }

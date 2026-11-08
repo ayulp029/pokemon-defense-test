@@ -16,7 +16,7 @@ window.PD = window.PD || {};
     tank: '大睡熊',
     slowShooter: '噴水龜',
     burnShooter: '火尾蜥',
-    scout: '小機器人',
+    scout: '搗蛋團小兵',
     tough: '紫紋蛇',
     runner: '跑腿貓',
     armored: '厚殼機器人',
@@ -98,6 +98,8 @@ window.PD = window.PD || {};
     basicShooter: {
       cost: 75, hp: 6, unlock: 1, range: 3, interval: 2, damage: 1, fx: 'lightning',
       size: { w: 66, h: 98 }, color: 0xf5d531, light: 0xfff3b0, icon: 'bolt',
+      // 本機限定的待機動畫（assets/local-art/<file>.png）；沒有檔案就用靜態圖
+      idleSheet: { file: 'basicShooter-idle', frames: 6, frameMs: 140 },
     },
     doubleStriker: {
       cost: 100, hp: 14, unlock: 2, range: 1, interval: 2, damage: 2, secondHitDelay: 0.3, fx: 'vine',
@@ -137,11 +139,18 @@ window.PD = window.PD || {};
       openLanes: [1],
       requiredToStart: ['trainer', 'basicShooter'],
       tutorial: { trainer: { lane: 1, col: 1 }, basicShooter: { lane: 1, col: 6 } },
+      // 只影響這一關的調整，理由記在 CLAUDE.md「第 1 關平衡」
+      tune: {
+        startBalls: fast ? 1500 : 250,
+        skyOrbEvery: 8,
+        genEvery: 8,
+        enemies: { scout: { hp: 3, secPerCell: 9 } },
+      },
       script: [
-        { t: 15, wave: 1, lane: 1, kind: 'scout' },
-        { t: 30, wave: 1, lane: 1, kind: 'scout' },
-        { t: 50, wave: 2, lane: 1, kind: 'scout' },
-        { t: 65, wave: 2, lane: 1, kind: 'scout' },
+        { t: 12, wave: 1, lane: 1, kind: 'scout' },
+        { t: 32, wave: 1, lane: 1, kind: 'scout' },
+        { t: 54, wave: 2, lane: 1, kind: 'scout' },
+        { t: 76, wave: 2, lane: 1, kind: 'scout' },
       ],
     },
   ];
@@ -171,6 +180,8 @@ window.PD = window.PD || {};
     },
     fx: {
       maxParticles: 200,
+      ambientMaxUsed: 110, // 塵土、小火星、水滴這類背景粒子：場上粒子超過這個數就不再新增，把額度留給命中特效
+      contactStars: 5,
       hitParticles: 8,
       starParticles: 24,
       projectileSeconds: 0.14,

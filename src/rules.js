@@ -8,6 +8,12 @@ PD.BattleSim = class BattleSim {
     this.rules = config.rules;
     this.level = config.levels[levelIndex];
     this.mode = config.modes[modeId];
+    // 關卡專屬的數值調整（沒寫的項目沿用共通設定），不改動共通的角色與敵人表
+    this.tune = this.level.tune || {};
+    this.enemyDefs = {};
+    Object.keys(config.enemies).forEach((k) => {
+      this.enemyDefs[k] = Object.assign({}, config.enemies[k], (this.tune.enemies || {})[k]);
+    });
     this.tps = Math.round(1 / this.rules.tickSeconds);
     this.events = [];
     this.commands = [];
@@ -17,9 +23,11 @@ PD.BattleSim = class BattleSim {
 
   ticks(seconds) { return Math.round(seconds * this.tps); }
 
+  genSeconds(def) { return this.tune.genEvery || def.genEvery; }
+
   freshState() {
     return {
-      phase: 'prep', tick: 0, balls: this.rules.startBalls, nextId: 1,
+      phase: 'prep', tick: 0, balls: this.tune.startBalls || this.rules.startBalls, nextId: 1,
       nextSpawn: 0, lastSnapWave: 0, rescues: 0, placeCd: 0,
       waitingHint: false, skySeq: 0, units: [], enemies: [], orbs: [],
     };
@@ -117,7 +125,7 @@ PD.BattleSim = class BattleSim {
     for (let i = 0; i < s.enemies.length; i++) {
       const e = s.enemies[i];
       e.px = e.x;
-      const def = this.cfg.enemies[e.kind];
+      const def = this.enemyDefs[e.kind];
       let speed = (1 / def.secPerCell) * this.mode.speedMul;
       if (e.slowEnd > s.tick) speed *= e.slowFactor;
       const blocker = this.findBlocker(e);
@@ -149,7 +157,7 @@ PD.BattleSim = class BattleSim {
     const script = this.level.script;
     while (s.nextSpawn < script.length && this.ticks(script[s.nextSpawn].t) === now) {
       const ev = script[s.nextSpawn++];
-      const def = this.cfg.enemies[ev.kind];
+      const def = this.enemyDefs[ev.kind];
       s.enemies.push({
         id: s.nextId++, kind: ev.kind, lane: ev.lane,
         x: this.rules.spawnX, px: this.rules.spawnX, hp: def.hp, maxHp: def.hp,
@@ -325,7 +333,7 @@ PD.BattleSim = class BattleSim {
   economy(now) {
     const s = this.state;
     if (s.phase !== 'battle') return;
-    const sky = this.ticks(this.rules.skyOrbEvery);
+    const sky = this.ticks(this.tune.skyOrbEvery || this.rules.skyOrbEvery);
     if (now % sky === 0) {
       // 落點用固定順序，不用隨機
       const open = this.level.openLanes;
@@ -338,7 +346,7 @@ PD.BattleSim = class BattleSim {
       const u = s.units[i];
       const def = this.cfg.units[u.kind];
       if (def.genEvery && now >= u.genNext) {
-        u.genNext += this.ticks(def.genEvery);
+        u.genNext += this.ticks(this.genSeconds(def));
         this.addOrb(u.col, u.lane, 'trainer');
       }
     }
@@ -413,7 +421,7 @@ PD.BattleSim = class BattleSim {
     const unit = {
       id: s.nextId++, kind: cmd.kind, lane: cmd.lane, col: cmd.col, hp: def.hp, maxHp: def.hp,
       targetId: 0, fireTick: 0, secondTick: -1, secondTarget: 0, roundGate: 0,
-      genNext: def.genEvery ? s.tick + this.ticks(def.genEvery) : 0,
+      genNext: def.genEvery ? s.tick + this.ticks(this.genSeconds(def)) : 0,
     };
     s.units.push(unit);
     this.events.push({ type: 'placed', id: unit.id, kind: cmd.kind });
