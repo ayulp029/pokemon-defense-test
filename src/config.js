@@ -138,16 +138,16 @@ window.PD = window.PD || {};
   const levels = [
     {
       number: 1,
-      openLanes: [1],
+      openLanes: [1, 2, 3, 4],
       requiredToStart: ['trainer', 'basicShooter'],
       tutorial: { trainer: { lane: 1, col: 1 }, basicShooter: { lane: 1, col: 6 } },
       // 只影響這一關的調整，理由記在 CLAUDE.md「第 1 關平衡」
       tune: {
-        skyOrbEvery: 8,
-        genEvery: 8,
+        skyOrbEvery: 14,
+        genEvery: 12,
         // 走速以小兵 9 → 6.5 秒為準，其他敵人照同樣比例（約 0.72 倍）
         enemies: {
-          scout: { secPerCell: 6.5 },
+          scout: { secPerCell: 6.5, hp: 8 },
           tough: { secPerCell: 5.8 },
           runner: { secPerCell: 3.6 },
           armored: { secPerCell: 7.2 },
@@ -155,11 +155,13 @@ window.PD = window.PD || {};
       },
       script: [
         { t: 10, wave: 1, lane: 1, kind: 'scout' },
-        { t: 22, wave: 1, lane: 1, kind: 'scout' },
-        { t: 34, wave: 1, lane: 1, kind: 'scout' },
-        { t: 46, wave: 2, lane: 1, kind: 'scout' },
-        { t: 54, wave: 2, lane: 1, kind: 'scout' },
-        { t: 62, wave: 2, lane: 1, kind: 'scout' },
+        { t: 13, wave: 1, lane: 3, kind: 'scout' },
+        { t: 16, wave: 1, lane: 2, kind: 'scout' },
+        { t: 19, wave: 1, lane: 4, kind: 'scout' },
+        { t: 22, wave: 2, lane: 1, kind: 'scout' },
+        { t: 25, wave: 2, lane: 3, kind: 'scout' },
+        { t: 28, wave: 2, lane: 2, kind: 'scout' },
+        { t: 31, wave: 2, lane: 4, kind: 'scout' },
       ],
     },
   ];

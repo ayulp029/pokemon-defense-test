@@ -29,7 +29,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     this.clock = 0; // 真實時間：防手抖、按鈕閃爍用，不跟著速度鈕變快
     this.worldClock = 0; // 戰場時間：角色與特效的動畫用，跟著速度鈕變快
     this.speedIndex = 0;
-    this.hintSwapTick = 0;
+    this.hintSwapAt = 0;
     this.restoring = false;
     this.fpsTime = 0; this.fpsFrames = 0; this.lowFor = 0;
 
@@ -253,8 +253,8 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
       }
     }
     this.drainEvents();
-    if (this.hintSwapTick && sim.state.tick >= this.hintSwapTick) {
-      this.hintSwapTick = 0;
+    if (this.hintSwapAt && this.clock >= this.hintSwapAt) { // 用真實時間，3× 時孩子一樣有時間讀完
+      this.hintSwapAt = 0;
       if (this.hintText.text === PD.text.autoCollect) this.showHint(PD.text.inRangeHint);
     }
     this.syncViews(this.accum / this.cfg.rules.tickSeconds);
@@ -284,7 +284,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
         break;
       case 'battleStart':
         this.showHint(PD.text.autoCollect);
-        this.hintSwapTick = this.sim.state.tick + this.sim.ticks(4);
+        this.hintSwapAt = this.clock + 4;
         break;
       case 'wave':
         if (this.sim.mode.autoWaveHint) this.showWaveHint(ev);
@@ -347,7 +347,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
         this.exitRecall();
         this.setSelected(null);
         this.accum = 0;
-        this.hintSwapTick = 0;
+        this.hintSwapAt = 0;
         this.refreshPrepHint();
         break;
       default: break;
