@@ -20,6 +20,21 @@ window.PD = window.PD || {};
     tough: '紫紋蛇',
     runner: '跑腿貓',
     armored: '厚殼機器人',
+    pierceShooter: '水晶龍',
+    // 第 2、3 關的新敵人（圖都是四張已公開貼圖重新上色，見 enemies 的 artFrom）
+    bruiser: '鐵甲熊兵',
+    healer: '補補蛙',
+    jumper: '彈跳蜥',
+    splitter: '雙胞搗蛋',
+    splitling: '小搗蛋',
+    // 主動技能
+    skill_trainer: '能量大豐收',
+    skill_basicShooter: '閃電連發',
+    skill_burnShooter: '火焰地毯',
+    skill_slowShooter: '大浪沖沖',
+    skill_doubleStriker: '藤蔓纏纏',
+    skill_tank: '翻身大壓',
+    skill_pierceShooter: '水晶彗星',
   };
 
   // ===== 畫面上的句子（名稱一律從名稱表取得）=====
@@ -71,6 +86,16 @@ window.PD = window.PD || {};
     nextLevel: '下一關',
     backToMap: '回地圖',
     changeMode: '換模式',
+    newEnemyTitle: (name) => `新敵人：${name}`,
+    enemyDesc: {
+      bruiser: '很硬、走得慢，要用前排擋住',
+      healer: '會幫旁邊的同伴補血，先打它',
+      jumper: '會跳過第一個擋路的朋友',
+      splitter: '打倒後會變成兩隻小的',
+    },
+    skillTap: (name) => `${name}：再點圓鈕`,
+    skillWait: '還要等一下才能再用',
+    skillReady: '可以放招了！點朋友，再點圓鈕',
   };
 
   // ===== 版面（基準畫面 1180×820）=====
@@ -91,11 +116,14 @@ window.PD = window.PD || {};
     speedBtn: { x: 918, y: 1, w: 78, h: 78 },
     muteBtn: { x: 1006, y: 1, w: 78, h: 78 },
     pauseBtn: { x: 1094, y: 1, w: 78, h: 78 },
-    cards: { x: 20, y: 676, w: 136, h: 120, gap: 10 },
+    // 七張卡：118×120、間距 6，x 20～882（在 1024×768 的 iPad 上寬約 102 點）
+    cards: { x: 20, y: 676, w: 118, h: 120, gap: 6 },
     cancelBtn: { x: 1040, y: 676, w: 120, h: 120 },
     recallBtn: { x: 896, y: 676, w: 136, h: 120 },
     recallGuardSeconds: 0.35, // 防止手抖連點：第一次點角色後，這段時間內的第二下不算
     orbHitSize: 64,
+    // 技能圓鈕：78 ÷ 1180 × 1024 ≈ 67.7 點，在小 iPad 上仍大於 64 點
+    skillBtn: { size: 78, gapAboveHead: 12, minCenterY: 124, autoCloseSeconds: 3 },
     // 大地圖選關：每一關的圓鈕中心，點擊範圍是圓鈕外的正方形（200×200）
     map: {
       nodes: [{ x: 230, y: 500 }, { x: 590, y: 320 }, { x: 950, y: 500 }],
@@ -121,11 +149,11 @@ window.PD = window.PD || {};
       idleSheet: { file: 'basicShooter-idle', frames: 6, frameMs: 140 },
     },
     doubleStriker: {
-      cost: 100, hp: 8, unlock: 2, range: 2, interval: 2, damage: 2, secondHitDelay: 0.3, fx: 'vine',
+      cost: 100, hp: 8, unlock: 2, range: 2, interval: 2, damage: 2, secondHitDelay: 0.3, cleave: true, fx: 'vine',
       size: { w: 70, h: 100 }, color: 0x46b868, light: 0xc6f2c8, icon: 'leaf',
     },
     tank: {
-      cost: 125, hp: 30, unlock: 3,
+      cost: 125, hp: 40, unlock: 3, thorns: 1,
       size: { w: 82, h: 115 }, color: 0x5a7ea6, light: 0xdbe6f2, icon: 'shield',
     },
     slowShooter: {
@@ -138,8 +166,25 @@ window.PD = window.PD || {};
       burn: { perSecond: 1, seconds: 3 },
       size: { w: 68, h: 100 }, color: 0xee6a3a, light: 0xffd6b8, icon: 'flame',
     },
+    // 穿透波紋：同一條路前方所有敵人各打 1。range 10 表示從任何一欄都能打到出怪點
+    pierceShooter: {
+      cost: 175, hp: 6, unlock: 6, range: 10, interval: 2, damage: 1, pierce: true, fx: 'crystal',
+      size: { w: 68, h: 100 }, color: 0x7fb8ea, light: 0xe2f3ff, icon: 'gem',
+    },
   };
-  const cardOrder = ['trainer', 'basicShooter', 'doubleStriker', 'tank', 'slowShooter', 'burnShooter'];
+  const cardOrder = ['trainer', 'basicShooter', 'doubleStriker', 'tank', 'slowShooter', 'burnShooter', 'pierceShooter'];
+
+  // ===== 主動技能（毛毛設計 docs/active-skills-v1.md；建議值，尚未實測）=====
+  // cd＝冷卻秒數；一起守護（5 歲）再乘 modes.together.skillCdMul
+  const skills = {
+    trainer: { cd: 45, orbs: 2 },
+    basicShooter: { cd: 20, seconds: 5, rate: 3 },
+    burnShooter: { cd: 30, seconds: 6, cells: 3, burnSeconds: 3 },
+    slowShooter: { cd: 35, push: 1, damage: 1, slowSeconds: 4, slowFactor: 0.5 },
+    doubleStriker: { cd: 25, reach: 1.5, rootSeconds: 3, damage: 4 },
+    tank: { cd: 40, heal: 0.5, reach: 1.5, damage: 3, push: 1, stunSeconds: 2 },
+    pierceShooter: { cd: 60, damage: 3, chargeSeconds: 0.4 },
+  };
 
   // ===== 敵人 =====
   const enemies = {
@@ -147,6 +192,12 @@ window.PD = window.PD || {};
     tough: { hp: 6, secPerCell: 8, size: { w: 62, h: 94 }, color: 0x8a5cc0, light: 0xe0ccf5, shape: 'stripe' },
     runner: { hp: 6, secPerCell: 5, size: { w: 62, h: 94 }, color: 0xe88fb0, light: 0xfde0ea, shape: 'swift' },
     armored: { hp: 12, secPerCell: 10, size: { w: 72, h: 108 }, color: 0x6c7484, light: 0xc2c9d6, shape: 'plated' },
+    // artFrom＝用哪張已公開貼圖重新上色（程式即時畫，不產生新圖檔），recolor＝上色的顏色，outline＝描邊色。缺貼圖時退回 shape 色塊
+    bruiser: { hp: 24, secPerCell: 5.5, size: { w: 80, h: 112 }, color: 0x6f7f92, light: 0xcfd8e3, shape: 'plated', artFrom: 'tank', recolor: 0x8596ab, outline: 0x27313d },
+    healer: { hp: 7, secPerCell: 3.25, size: { w: 62, h: 94 }, color: 0xf08bb4, light: 0xffe0ec, shape: 'stripe', artFrom: 'doubleStriker', recolor: 0xff7fb0, outline: 0xb0296a, heal: { amount: 2, every: 3, reach: 2 } },
+    jumper: { hp: 6, secPerCell: 3, size: { w: 72, h: 80 }, color: 0x35b5a8, light: 0xc8f5ee, shape: 'swift', artFrom: 'burnShooter', recolor: 0x2fc4b4, outline: 0x0d5a55, hopOver: true },
+    splitter: { hp: 9, secPerCell: 3.25, size: { w: 58, h: 96 }, color: 0xd9544f, light: 0xffd9d0, shape: 'robot', artFrom: 'trainer', recolor: 0xe2453c, outline: 0x7a1414, splitInto: { kind: 'splitling', count: 2 } },
+    splitling: { hp: 3, secPerCell: 2.6, size: { w: 40, h: 66 }, color: 0xf0817a, light: 0xffe4df, shape: 'robot', artFrom: 'trainer', recolor: 0xf26a5e, outline: 0x7a1414, noOrb: true },
   };
 
   // ===== 關卡 =====
@@ -182,7 +233,7 @@ window.PD = window.PD || {};
         { at: 54, gap: 5, kinds: many('scout', 5) },
         { at: 88, gap: 3.5, kinds: many('scout', 7) },
         { at: 124, gap: 2.5, kinds: many('scout', 10) },
-        { at: 162, gap: 0.5, kinds: many('scout', 40) }, // 終局波
+        { at: 162, gap: 0.35, kinds: many('scout', 60) }, // 終局波
       ]),
     },
     {
@@ -199,9 +250,9 @@ window.PD = window.PD || {};
       script: makeScript([
         { at: 16, gap: 6, kinds: many('scout', 4) },
         { at: 52, gap: 5, kinds: ['scout', 'tough', 'scout', 'tough', 'scout'] },
-        { at: 88, gap: 3.5, kinds: ['tough', 'scout', 'tough', 'scout', 'tough', 'scout', 'tough', 'scout'] },
-        { at: 124, gap: 2.5, kinds: many('tough', 10) },
-        { at: 162, gap: 0.5, kinds: [].concat(...Array(10).fill(['tough', 'scout', 'tough', 'tough'])) }, // 終局波
+        { at: 88, gap: 3.5, kinds: ['tough', 'scout', 'bruiser', 'scout', 'tough', 'scout', 'bruiser', 'scout'] },
+        { at: 124, gap: 2.5, kinds: ['tough', 'healer', 'tough', 'bruiser', 'tough', 'healer', 'tough', 'bruiser', 'tough', 'tough'] },
+        { at: 162, gap: 0.5, kinds: [].concat(...Array(10).fill(['tough', 'bruiser', 'healer', 'tough'])) }, // 終局波
       ]),
     },
     {
@@ -221,25 +272,26 @@ window.PD = window.PD || {};
       },
       script: makeScript([
         { at: 16, gap: 6, kinds: ['scout', 'scout', 'tough', 'tough'] },
-        { at: 52, gap: 5, kinds: ['runner', 'scout', 'tough', 'runner', 'scout'] },
-        { at: 88, gap: 3.5, kinds: [].concat(...Array(4).fill(['tough', 'runner'])) },
-        { at: 124, gap: 2.5, kinds: [].concat(...Array(5).fill(['runner', 'tough'])) },
-        { at: 162, gap: 0.5, kinds: [].concat(...Array(8).fill(['tough', 'runner', 'tough', 'runner'])) }, // 終局波
+        { at: 52, gap: 5, kinds: ['runner', 'scout', 'jumper', 'runner', 'jumper'] },
+        { at: 88, gap: 3.5, kinds: ['tough', 'splitter', 'bruiser', 'runner', 'jumper', 'splitter', 'healer', 'runner'] },
+        { at: 124, gap: 2.5, kinds: [].concat(...Array(5).fill(['splitter', 'jumper'])) },
+        { at: 162, gap: 0.5, kinds: [].concat(...Array(8).fill(['bruiser', 'splitter', 'jumper', 'healer'])) }, // 終局波
       ]),
     },
   ];
 
   const modes = {
     // 宇鋒 2026-11-08 要求稍難（原本 0.75 倍、5 次），理由與試玩數據見 CLAUDE.md
-    together: { speedMul: 0.75, rescues: 3, autoWaveHint: true },
-    solo: { speedMul: 1, rescues: 3, autoWaveHint: false },
+    // skillCdMul：5 歲模式技能冷卻短 20%（active-skills-v1）；「5 歲模式」對應「一起守護」
+    together: { speedMul: 0.75, rescues: 3, autoWaveHint: true, skillCdMul: 0.8 },
+    solo: { speedMul: 1, rescues: 3, autoWaveHint: false, skillCdMul: 1 },
   };
 
   PD.names = names;
   PD.makeScript = makeScript; // 自動試玩試算不同的波次時也用同一套排路線的規則
   PD.text = text;
   PD.config = {
-    layout, units, cardOrder, enemies, levels, modes,
+    layout, units, cardOrder, enemies, levels, modes, skills,
     speedSteps: [1, 2, 3], // 速度鈕循環的倍率
     rules: {
       tickSeconds: 0.05,

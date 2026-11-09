@@ -56,6 +56,14 @@ PD.Anim = (function () {
       hurt: DEFAULT_HURT,
     },
 
+    // 穿透遠攻：飄起來再送出波紋
+    pierceShooter: {
+      idle: { speed: 2.0, amp: 0.03, sway: 0.02 },
+      windup: 0.34, charge: pose(-0.05, 0.08, -0.06, -2, -6),
+      snap: 0.08, dur: 0.42, strike: pose(0.1, -0.06, 0.12, 6, 0),
+      hurt: DEFAULT_HURT,
+    },
+
     // ===== 敵人：facing -1 代表面朝左，「往前」會自動換成往左 =====
     // walk 的欄位：speed 步伐快慢、hop 跳多高、hopPow 跳的手感（小於 1 彈、大於 1 貼地）、
     // stretch／squash 騰空拉長與落地壓扁、tilt 左右傾、sway 左右位移、twist 身體扭動、lean 前傾、dust 塵土大小
@@ -84,6 +92,46 @@ PD.Anim = (function () {
       hurt: ENEMY_HURT,
     },
     // 高生命敵人：走得又慢又重，左右搖晃，落地時壓一下
+    // 鐵甲熊兵：比厚殼機器人更沉，一步一頓
+    bruiser: {
+      facing: -1, idle: { speed: 1.2, amp: 0.03, sway: 0.006 },
+      walk: { speed: 3, hop: 1.5, hopPow: 2, stretch: 0, squash: 0.1, tilt: 0.08, sway: 2.5, twist: 0, lean: 0, dust: 1.6 },
+      windup: 0.6, charge: pose(0.06, -0.08, -0.18, -9, 0),
+      snap: 0.1, dur: 0.6, strike: pose(-0.04, 0.06, 0.2, 16, 0),
+      hurt: { dur: 0.3, kick: -3, jitter: 2, tilt: 0.04, squash: 0.08 },
+    },
+    // 補補蛙：輕快地小跳
+    healer: {
+      facing: -1, idle: { speed: 2.6, amp: 0.03, sway: 0.016 },
+      walk: { speed: 6, hop: 7, hopPow: 0.8, stretch: 0.06, squash: 0.1, tilt: 0.03, sway: 0, twist: 0, lean: 0, dust: 0.7 },
+      windup: 0.4, charge: pose(0.06, -0.1, -0.16, -6, 0),
+      snap: 0.07, dur: 0.42, strike: pose(-0.06, 0.08, 0.2, 12, -3),
+      hurt: ENEMY_HURT,
+    },
+    // 彈跳蜥：低身快走
+    jumper: {
+      facing: -1, idle: { speed: 3, amp: 0.028, sway: 0.012 },
+      walk: { speed: 11, hop: 5, hopPow: 0.8, stretch: 0.06, squash: 0.1, tilt: 0.05, sway: 0, twist: 0, lean: 0.07, dust: 0.8 },
+      windup: 0.34, charge: pose(0.14, -0.16, -0.14, -6, 0),
+      snap: 0.06, dur: 0.38, strike: pose(-0.08, 0.12, 0.22, 16, -5),
+      hurt: ENEMY_HURT,
+    },
+    // 雙胞搗蛋：大步走
+    splitter: {
+      facing: -1, idle: { speed: 2.4, amp: 0.025, sway: 0.012 },
+      walk: { speed: 7, hop: 4, hopPow: 1, stretch: 0.03, squash: 0.06, tilt: 0.05, sway: 1, twist: 0, lean: 0, dust: 1 },
+      windup: 0.42, charge: pose(0.06, -0.09, -0.2, -7, 0),
+      snap: 0.07, dur: 0.44, strike: pose(-0.06, 0.08, 0.24, 14, -3),
+      hurt: ENEMY_HURT,
+    },
+    // 小搗蛋：跑得碎步
+    splitling: {
+      facing: -1, idle: { speed: 3.6, amp: 0.03, sway: 0.014 },
+      walk: { speed: 14, hop: 5, hopPow: 0.8, stretch: 0.06, squash: 0.1, tilt: 0.05, sway: 0, twist: 0, lean: 0.05, dust: 0.5 },
+      windup: 0.3, charge: pose(0.1, -0.14, -0.14, -4, 0),
+      snap: 0.05, dur: 0.32, strike: pose(-0.08, 0.1, 0.2, 10, -4),
+      hurt: ENEMY_HURT,
+    },
     armored: {
       facing: -1, idle: { speed: 1.4, amp: 0.03, sway: 0.006 },
       walk: { speed: 3.2, hop: 1.5, hopPow: 2, stretch: 0, squash: 0.09, tilt: 0.07, sway: 2, twist: 0, lean: 0, dust: 1.5 },
@@ -91,6 +139,17 @@ PD.Anim = (function () {
       snap: 0.1, dur: 0.56, strike: pose(-0.04, 0.06, 0.18, 14, 0),
       hurt: { dur: 0.3, kick: -3, jitter: 2, tilt: 0.04, squash: 0.08 },
     },
+  };
+
+  // 放技能時的整段動作：[秒, sx, sy, y]（差值），中間線性補間
+  const SKILL_KEYS = {
+    trainer: [[0, 0, 0, 0], [0.1, -0.05, 0.1, 0], [0.2, 0, 0, 0]],
+    basicShooter: [[0, 0, 0, 0], [0.08, 0.1, -0.1, 0], [0.2, 0, 0, 0]],
+    burnShooter: [[0, 0, 0, 0], [0.1, 0.14, -0.12, 0], [0.32, 0, 0, 0]],
+    slowShooter: [[0, 0, 0, 0], [0.12, -0.1, -0.1, 0], [0.3, 0.06, 0.06, 0], [0.42, 0, 0, 0]],
+    doubleStriker: [[0, 0, 0, 0], [0.14, 0.08, -0.15, 0], [0.3, -0.05, 0.1, -22], [0.46, 0, 0, 0]],
+    tank: [[0, 0, 0, 0], [0.25, 0.15, 0.15, -20], [0.38, 0.15, -0.2, 0], [0.62, 0, 0, 0]],
+    pierceShooter: [[0, 0, 0, 0], [0.4, 0.04, 0.04, -15], [0.56, 0, 0, 0]],
   };
 
   // 被擋住時的煞車：身體往前晃一下再站穩
@@ -121,6 +180,8 @@ PD.Anim = (function () {
     },
 
     hurt(v, st) { v.hurtT = st.hurt.dur; },
+
+    skill(v, kind) { v.skillKeys = SKILL_KEYS[kind] || null; v.skillT = 0; },
 
     brake(v) { v.stopT = BRAKE.dur; },
 
@@ -221,6 +282,25 @@ PD.Anim = (function () {
           P.sx += (-stretch * 0.7 + Math.sin(v.walkPhase * 2) * W.twist) * b;
           P.r += (s * W.tilt + W.lean) * b;
           P.x += Math.cos(v.walkPhase) * W.sway * b;
+        }
+      }
+      if (v.skillKeys && v.skillT >= 0) {
+        v.skillT += dt;
+        const K = v.skillKeys;
+        const end = K[K.length - 1][0];
+        if (v.skillT >= end) {
+          v.skillT = -1;
+        } else {
+          for (let i = 1; i < K.length; i++) {
+            if (v.skillT > K[i][0]) continue;
+            const a = K[i - 1];
+            const b = K[i];
+            const e = (v.skillT - a[0]) / (b[0] - a[0]);
+            P.sx += a[1] + (b[1] - a[1]) * e;
+            P.sy += a[2] + (b[2] - a[2]) * e;
+            P.y += a[3] + (b[3] - a[3]) * e;
+            break;
+          }
         }
       }
       if (v.stopT > 0) {

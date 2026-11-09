@@ -21,6 +21,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     this.L = cfg.layout;
     this.sim = new PD.BattleSim(cfg, this.levelIndex, this.modeId);
     this.fx = new PD.Fx(this, cfg);
+    this.skillFx = new PD.SkillFx(this, cfg);
     this.overlay = new PD.Overlay(this, cfg);
     this.accum = 0;
     this.pausedBy = null;
@@ -45,6 +46,11 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     this.buildGridHelpers();
     this.buildHud();
     this.buildCards();
+    this.buildSkillMenu();
+    this.introDone = new Set();
+    this.introKind = '';
+    this.skillOrbFloat = false;
+    this.skillHinted = false;
 
     this.input.on('pointerdown', (p) => this.onTap(p.x / PD.RES, p.y / PD.RES));
     this.onHidden = () => { if (document.hidden) this.freeze('hidden'); };
@@ -131,15 +137,15 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
       const cy = C.y + C.h / 2;
       const unlocked = this.sim.isUnlocked(kind);
       const glow = PD.img(this, cx, cy, 'cardGlow').setDepth(399).setTint(0xfff176)
-        .setBlendMode(Phaser.BlendModes.ADD).setVisible(false);
+        .setBlendMode(Phaser.BlendModes.ADD).setVisible(false).setScale(PD.TEX_SCALE * (C.w / 136), PD.TEX_SCALE);
       const bg = PD.img(this, cx, cy, unlocked ? 'card_' + kind : 'cardLocked').setDepth(400);
       // 價格徽章在左上角、角色圖靠右，兩者不重疊；鎖住的卡沒有徽章，圖放中間
-      const picX = unlocked ? x + 102 : cx;
+      const picX = unlocked ? x + C.w - 34 : cx;
       const pic = PD.img(this, picX, C.y + 47, 'cardPic_' + kind).setDepth(401);
       const name = PD.txt(this, cx, C.y + 102, PD.names[kind], 20, '#2a2a2a', 0).setDepth(402);
-      const badge = PD.img(this, x + 39, C.y + 25, 'costBadge').setDepth(402).setTint(0xd2571a);
-      const coin = PD.img(this, x + 17, C.y + 25, 'orb').setDepth(403).setScale(PD.TEX_SCALE * 0.4);
-      const cost = PD.txt(this, x + 28, C.y + 25, String(def.cost), 24, '#ffffff', 3).setOrigin(0, 0.5).setDepth(403);
+      const badge = PD.img(this, x + 34, C.y + 25, 'costBadge').setDepth(402).setTint(0xd2571a).setScale(PD.TEX_SCALE * 0.84);
+      const coin = PD.img(this, x + 15, C.y + 25, 'orb').setDepth(403).setScale(PD.TEX_SCALE * 0.36);
+      const cost = PD.txt(this, x + 25, C.y + 25, String(def.cost), 22, '#ffffff', 3).setOrigin(0, 0.5).setDepth(403);
       const cd = this.add.image(x, C.y + C.h, 'atlas', 'white').setOrigin(0, 1).setDepth(403)
         .setTint(0x202a34).setAlpha(0.55).setDisplaySize(C.w, 0).setVisible(false);
       let lockImg = null;
@@ -168,6 +174,85 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     this.cancelText = PD.txt(this, R.x + R.w / 2, R.y + R.h - 26, PD.text.cancel, 22).setDepth(401);
   }
 
+  // ===== 技能圓鈕 =====
+  buildSkillMenu() {
+    const c = this.add.container(0, 0).setDepth(430).setVisible(false);
+    const bg = PD.img(this, 0, 0, 'skillBtn');
+    const icon = PD.img(this, 0, 0, 'skillIcon_trainer');
+    const ring = this.add.graphics();
+    c.add([bg, icon, ring]);
+    const size = this.L.skillBtn.size;
+    this.skillMenu = { c, bg, icon, ring, unitId: 0, kind: '', openedAt: 0, rect: { x: 0, y: 0, w: size, h: size } };
+  }
+
+  skillBtnCenter(u) {
+    const def = this.cfg.units[u.kind];
+    const B = this.L.skillBtn;
+    const y = this.footY(u.lane) - def.size.h - B.gapAboveHead - B.size / 2;
+    return { x: this.ruleToX(u.col), y: Math.max(B.minCenterY, y) };
+  }
+
+  openSkillMenu(u) {
+    const M = this.skillMenu;
+    const p = this.skillBtnCenter(u);
+    M.unitId = u.id;
+    M.kind = u.kind;
+    M.openedAt = this.clock;
+    M.rect.x = p.x - M.rect.w / 2;
+    M.rect.y = p.y - M.rect.h / 2;
+    M.c.setPosition(p.x, p.y).setVisible(true);
+    M.icon.setFrame('skillIcon_' + u.kind);
+    this.showHint(PD.text.skillTap(PD.names['skill_' + u.kind]));
+    this.updateSkillMenu();
+  }
+
+  closeSkillMenu() {
+    this.skillMenu.unitId = 0;
+    this.skillMenu.c.setVisible(false);
+  }
+
+  updateSkillMenu() {
+    const M = this.skillMenu;
+    if (!M.unitId) return;
+    const u = this.sim.findUnit(M.unitId);
+    if (!u || this.clock - M.openedAt >= this.L.skillBtn.autoCloseSeconds) { this.closeSkillMenu(); return; }
+    const left = this.sim.skillLeft(u);
+    const R = this.L.skillBtn.size / 2 - 5;
+    M.bg.setTint(left > 0 ? 0xb9c0c9 : 0xffd84a);
+    M.icon.setAlpha(left > 0 ? 0.55 : 1);
+    M.ring.clear();
+    if (left > 0) {
+      M.ring.lineStyle(9, 0x4a5462, 0.95);
+      M.ring.beginPath();
+      M.ring.arc(0, 0, R, -Math.PI / 2, -Math.PI / 2 + left * Math.PI * 2, false);
+      M.ring.strokePath();
+    }
+  }
+
+  tapSkillButton() {
+    const u = this.sim.findUnit(this.skillMenu.unitId);
+    if (!u) { this.closeSkillMenu(); return; }
+    const problem = this.sim.skillProblem(u);
+    if (problem) { this.showHint(PD.text.skillWait); PD.Sound.play('tap'); this.skillMenu.openedAt = this.clock; return; }
+    PD.Sound.play('tap');
+    this.sim.command({ type: 'skill', id: u.id });
+    this.closeSkillMenu();
+    this.hideRange();
+    this.showHint('');
+  }
+
+  // 新敵人第一次出現：暫停戰鬥介紹一次
+  showEnemyIntro(kind) {
+    if (this.introDone.has(kind)) return;
+    this.introDone.add(kind);
+    this.introKind = kind;
+    this.overlay.show(PD.text.newEnemyTitle(PD.names[kind]), PD.text.enemyDesc[kind], [
+      { label: PD.text.resume, fn: () => { this.introKind = ''; this.introPic.setVisible(false); this.overlay.hide(); } },
+    ]);
+    if (!this.introPic) this.introPic = PD.img(this, this.L.width / 2 - 230, 500, 'enemy_' + kind).setDepth(501); // 在「繼續」鈕左邊，不壓到按鈕
+    this.introPic.setFrame('enemy_' + kind).setVisible(true);
+  }
+
   // ===== 物件池：角色／敵人 =====
   acquireActor(id, frame, name, size, foot, isEnemy) {
     let v = this.actorPool.pop();
@@ -178,11 +263,12 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
       const label = PD.txt(this, 0, 0, '', 14, '#ffffff', 3);
       const hpBack = PD.img(this, 0, 0, 'hpBack');
       const hpFill = PD.img(this, 0, 0, 'hpFill').setOrigin(0, 0.5);
+      const ready = this.add.image(0, -2, 'atlas', 'glow').setBlendMode(Phaser.BlendModes.ADD).setTint(0xffe9a0).setVisible(false);
       const burn = PD.img(this, 0, 0, 'iconBurn');
       const slow = PD.img(this, 0, 0, 'iconSlow');
       const flames = FLAME_SPOTS.map(() => PD.img(this, 0, 0, 'iconBurn').setOrigin(0.5, 1).setVisible(false));
-      c.add([shadow, body, label, ...flames, hpBack, hpFill, burn, slow]);
-      v = { c, shadow, body, label, flames, hpBack, hpFill, burn, slow, kindClass: 'actor', ...PD.Anim.newSlots() };
+      c.add([ready, shadow, body, label, ...flames, hpBack, hpFill, burn, slow]);
+      v = { c, ready, shadow, body, label, flames, hpBack, hpFill, burn, slow, kindClass: 'actor', ...PD.Anim.newSlots() };
     }
     v.shadowSX = PD.TEX_SCALE * (size.w * 1.15) / 96;
     v.shadow.setScale(v.shadowSX, PD.TEX_SCALE * 0.9);
@@ -196,7 +282,9 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
       walkBlend: 0, walkPhase: id * 1.7, walkStep: Math.floor(id * 1.7 / Math.PI), stepped: false, stopT: 0,
       breath: 0, actRate: 1, walkRate: 1, slowed: false, burning: false, flamesOn: false, tintNow: 0, dropT: 0,
       baseFrame: frame, idleFrames: 0, idleMs: 0, idleT: 0, idleShown: -1,
+      skillT: -1, skillKeys: null, readyOn: false, frenzyOn: false, slideT: 0, slideDx: 0, hopT: 0, hopDx: 0,
     });
+    v.ready.setVisible(false).setScale(PD.TEX_SCALE * (size.w / 48), PD.TEX_SCALE * 0.5);
     v.shadow.x = 0;
     v.body.setFrame(frame).clearTint().setScale(PD.TEX_SCALE).setPosition(0, 0).setRotation(0).setAlpha(1);
     v.label.setText(name).setPosition(0, -size.h * 0.5);
@@ -264,6 +352,8 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     }
     this.syncViews(this.accum / this.cfg.rules.tickSeconds);
     this.updateHud(dt);
+    this.updateSkillMenu();
+    this.skillFx.update(worldDt);
     this.fx.update(worldDt);
     this.updateQuality(delta);
   }
@@ -277,6 +367,27 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
   handleEvent(ev) {
     const v = ev.id ? this.viewById.get(ev.id) : null;
     switch (ev.type) {
+      case 'skill':
+        this.skillFx.cast(ev);
+        if (ev.kind === 'trainer') this.skillOrbFloat = true;
+        break;
+      case 'comet': this.skillFx.comet(ev); break;
+      case 'enemyNew': this.showEnemyIntro(ev.kind); break;
+      case 'enemyPushed':
+        if (v) { v.slideT = 0.3; v.slideDx = -ev.cells * this.L.grid.cellW; }
+        break;
+      case 'enemyHop':
+        if (v) { v.hopT = 0.42; v.hopDx = ev.cells * this.L.grid.cellW; }
+        break;
+      case 'enemyHeal':
+        if (v) this.fx.emit('plus', v.c.x, v.c.y - v.h * 0.7, 0x7ee081, { vx: 0, vy: -70, g: 0, life: 0.5, s0: 0.9, s1: 0.5, a: 1 });
+        break;
+      case 'enemySplit':
+        this.fx.burst('star', this.ruleToX(ev.x), this.footY(ev.lane) - 40, 0xffb0a0, 10, 180, 0.4, 0.6, 0.1);
+        break;
+      case 'thorns':
+        if (v) { v.flash = 0.08; this.fx.burst('spark', v.c.x - v.w * 0.4, v.c.y - v.h * 0.5, 0xdbe6f2, 5, 110, 0.25, 0.5, 0.1); }
+        break;
       case 'placed':
         PD.Sound.play('place');
         this.setSelected(null);
@@ -323,9 +434,11 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
         break;
       case 'unitGone':
         if (v) v.gone = true;
+        if (ev.id === this.skillMenu.unitId) this.closeSkillMenu();
         if (this.recalling) this.onRecallUnitLost(ev.id);
         break;
       case 'unitRecalled':
+        if (ev.id === this.skillMenu.unitId) this.closeSkillMenu();
         if (v) {
           v.gone = true;
           this.fx.flyToCounter(v.c.x, v.c.y - v.h * 0.5, this.L.orbCounter.x, this.L.orbCounter.y);
@@ -341,16 +454,22 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
           this.fx.flyToCounter(v.c.x, v.c.y, this.L.orbCounter.x, this.L.orbCounter.y);
           this.ballBump = 0.2;
           PD.Sound.play('collect');
+          if (ev.source === 'skill') {
+            this.fx.burst('star', v.c.x, v.c.y, 0xffe36b, 5, 120, 0.4, 0.5, 0.1);
+            if (this.skillOrbFloat) { this.skillOrbFloat = false; this.floatPlus(); }
+          }
         }
         break;
-      case 'won': this.exitRecall(); this.onWon(); break;
-      case 'failed': this.exitRecall(); this.onFailed(); break;
+      case 'won': this.exitRecall(); this.closeSkillMenu(); this.onWon(); break;
+      case 'failed': this.exitRecall(); this.closeSkillMenu(); this.onFailed(); break;
       case 'restored':
         this.clearAllViews();
         PD.Sound.startMusic();
         this.restoring = true;
         this.overlay.hide();
         this.exitRecall();
+        this.closeSkillMenu();
+        this.skillFx.clear();
         this.setSelected(null);
         this.accum = 0;
         this.hintSwapAt = 0;
@@ -375,7 +494,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     const strike = PD.Anim.release(shooter, style, second);
     const m = PD.Anim.muzzle(shooter, strike);
     PD.Sound.play('shot_' + ev.fx);
-    this.fx.fire(ev.fx, m.x, m.y, target);
+    this.fx.fire(ev.fx, m.x, m.y, target, ev.big);
     if (ev.fx !== 'vine' && !this.fx.reduced) this.fx.glowPop(m.x, m.y, PD.Fx.COLORS[ev.fx], 0.45, 0.12);
   }
 
@@ -500,6 +619,30 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     }
     this.animateActor(v, u.hp, u.maxHp, 0, style, this.chargeProgress(u, def, style));
     if (v.idleFrames) this.updateIdleFrame(v);
+    this.updateReady(v, u);
+  }
+
+  // 技能冷卻好了：腳下一圈柔光，並輕輕跳一下
+  updateReady(v, u) {
+    if (!this.cfg.skills[u.kind]) return;
+    const ready = this.sim.state.phase === 'battle' && u.skillAt <= this.sim.state.tick;
+    if (ready && !v.readyOn) {
+      v.land = 0.2;
+      if (!this.skillHinted) { this.skillHinted = true; this.showHint(PD.text.skillReady); }
+    }
+    v.readyOn = ready;
+    v.ready.setVisible(ready);
+    if (ready) v.ready.setAlpha(0.55 + Math.sin(this.clock * 4) * 0.25);
+  }
+
+  // 「+75」從能量計數器旁飄起來
+  floatPlus() {
+    const L = this.L;
+    if (!this.plusText) this.plusText = PD.txt(this, 0, 0, '', 34, '#ffe36b', 5).setDepth(402);
+    this.plusText.setText('+' + this.cfg.skills.trainer.orbs * this.cfg.rules.orbValue)
+      .setPosition(L.orbCounter.x + 110, L.orbCounter.y + 32).setAlpha(1).setVisible(true);
+    this.plusT = 0.9;
+    this.ballBump = 0.3;
   }
 
   // 待機時逐格播放；蓄力和出手時換回原本的靜態圖，讓原有的攻擊動作照舊
@@ -518,12 +661,26 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     if (!v) {
       v = this.acquireActor(e.id, 'enemy_' + e.kind, PD.names[e.kind], def.size, this.footY(e.lane), true);
       v.kind = e.kind;
-      if (this.textures.exists('art_' + e.kind)) v.label.setText(''); // 有貼圖就不在身上蓋字
+      if (this.textures.exists('art_' + (def.artFrom || e.kind))) v.label.setText(''); // 有貼圖就不在身上蓋字
       v.c.setDepth(25 + e.lane * 10);
     }
     v.seen = true;
     const x = e.px + (e.x - e.px) * alpha;
-    v.c.setPosition(this.ruleToX(x), v.foot);
+    // 被推回與跳躍只是外觀上的滑動：規則座標早就在終點了
+    let slide = 0;
+    let lift = 0;
+    if (v.slideT > 0) {
+      v.slideT -= this.frameDt;
+      const k = Math.max(0, v.slideT / 0.3);
+      slide = v.slideDx * k * k;
+    }
+    if (v.hopT > 0) {
+      v.hopT -= this.frameDt;
+      const k = Math.max(0, v.hopT / 0.42);
+      slide += v.hopDx * k;
+      lift = Math.sin((1 - k) * Math.PI) * 74;
+    }
+    v.c.setPosition(this.ruleToX(x) + slide, v.foot - lift);
     const burning = e.burnNext >= 0;
     const slowed = e.slowEnd > this.sim.state.tick;
     v.burn.setVisible(burning);
@@ -652,11 +809,16 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     const fall = this.sim.ticks(this.cfg.rules.orbFallSeconds);
     const k = Math.min(1, (o.age + alpha) / fall);
     const landY = this.laneY(o.lane) - 20;
-    const topY = o.source === 'sky' ? this.L.grid.y - 10 : landY - 60;
+    const fromSky = o.source === 'sky' || o.source === 'skill';
+    const topY = fromSky ? this.L.grid.y - 10 : landY - 60;
     const x = this.ruleToX(o.x);
     v.c.setPosition(x, topY + (landY - topY) * (1 - (1 - k) * (1 - k)));
     v.orb.setY(k >= 1 ? Math.sin(this.worldClock * 4 + o.id) * 3 : 0);
     v.glow.setAlpha(k >= 1 ? 0.55 + Math.sin(this.worldClock * 5 + o.id) * 0.2 : 0.3);
+    // 技能掉的球帶金色拖尾
+    if (o.source === 'skill' && k < 1 && !this.overlay.visible) {
+      this.fx.ambient('spark', v.c.x, v.c.y - 8, 0xffd54a, 0, -20, 0, 0.3, 0.8, 0.1, 0.9);
+    }
     v.landX = x; v.landY = landY;
     v.collectable = o.age >= fall;
   }
@@ -666,6 +828,12 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     const str = String(s.balls);
     if (this.ballText.text !== str) this.ballText.setText(str);
     if (this.ballBump > 0) this.ballBump -= dt;
+    if (this.plusT > 0) {
+      this.plusT -= dt;
+      this.plusText.y -= 34 * dt;
+      this.plusText.setAlpha(Math.min(1, this.plusT * 2));
+      if (this.plusT <= 0) this.plusText.setVisible(false);
+    }
     this.orbIcon.setScale(PD.TEX_SCALE * (1 + Math.max(0, this.ballBump) * 1.4));
 
     for (let i = 0; i < this.rescueIcons.length; i++) {
@@ -843,7 +1011,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
 
   showRange(lane, col, range, seconds) {
     for (let i = 0; i < this.rangeImgs.length; i++) {
-      const on = i < range;
+      const on = i < range && col + 1 + i <= this.L.grid.cols;
       this.rangeImgs[i].setVisible(on);
       if (on) this.rangeImgs[i].setPosition(this.ruleToX(col + 1 + i), this.laneY(lane));
     }
@@ -862,6 +1030,12 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
       return;
     }
     if (this.overlay.visible) { this.overlay.tap(x, y); return; }
+    // 技能圓鈕最優先；點其他地方就收起，這一下仍照常處理（例如點球）
+    const closedUnit = this.skillMenu.unitId;
+    if (closedUnit) {
+      if (PD.hitRect(this.skillMenu.rect, x, y)) { this.tapSkillButton(); return; }
+      this.closeSkillMenu();
+    }
     if (this.tapOrb(x, y)) return;
     const L = this.L;
     if (PD.hitRect(L.pauseBtn, x, y)) { PD.Sound.play('tap'); this.freeze('user'); return; }
@@ -876,7 +1050,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     for (let i = 0; i < this.cards.length; i++) {
       if (PD.hitRect(this.cards[i].rect, x, y)) { this.tapCard(this.cards[i]); return; }
     }
-    this.tapGrid(x, y);
+    this.tapGrid(x, y, closedUnit);
   }
 
   tapOrb(x, y) {
@@ -906,7 +1080,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     this.setSelected(card.kind);
   }
 
-  tapGrid(x, y) {
+  tapGrid(x, y, closedUnit) {
     const G = this.L.grid;
     if (x < G.x || x >= G.x + G.cols * G.cellW || y < G.y || y >= G.y + G.rows * G.cellH) return;
     const col = Math.floor((x - G.x) / G.cellW) + 1;
@@ -918,6 +1092,8 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
       if (this.selected) { this.showHint(PD.text.occupied); return; }
       const def = this.cfg.units[occupant.kind];
       if (def.range) this.showRange(lane, col, def.range, 2);
+      // 再點同一位角色只是收起圓鈕；沒有技能可用的階段（開戰前）不打開
+      if (occupant.id !== closedUnit && this.cfg.skills[occupant.kind] && this.sim.state.phase === 'battle') this.openSkillMenu(occupant);
       return;
     }
     if (!this.selected) { this.showHint(PD.text.pickCardFirst); return; }
@@ -964,6 +1140,8 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     this.pausedBy = null;
     this.overlay.hide();
     this.accum = 0;
+    // 切分頁把新敵人介紹蓋掉時，回來要接著顯示
+    if (this.introKind) { const k = this.introKind; this.introDone.delete(k); this.showEnemyIntro(k); return; }
     // 從暫停回來時，若剛好在波次提示要重新顯示
     if (this.sim.state.waitingHint) {
       const next = this.sim.level.script[this.sim.state.nextSpawn];

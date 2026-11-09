@@ -29,7 +29,7 @@ PD.BattleSim = class BattleSim {
     return {
       phase: 'prep', tick: 0, balls: this.tune.startBalls || this.rules.startBalls, nextId: 1,
       nextSpawn: 0, lastSnapWave: 0, rescues: 0, placeCd: 0, kills: 0,
-      waitingHint: false, skySeq: 0, units: [], enemies: [], orbs: [],
+      waitingHint: false, skySeq: 0, units: [], enemies: [], orbs: [], zones: [], introduced: [],
     };
   }
 
@@ -111,7 +111,9 @@ PD.BattleSim = class BattleSim {
     this.moveEnemies();
     this.spawnEnemies(now);
     this.unitAttacks(now);
+    this.zoneTicks(now);
     this.burnTicks(now);
+    this.enemySupport(now);
     this.removeDefeated();
     this.retarget(now);
     this.enemyContact();
@@ -130,12 +132,22 @@ PD.BattleSim = class BattleSim {
       const def = this.enemyDefs[e.kind];
       let speed = (1 / def.secPerCell) * this.mode.speedMul;
       if (e.slowEnd > s.tick) speed *= e.slowFactor;
+      if (e.rootEnd > s.tick || e.stunEnd > s.tick) speed = 0; // 被綁住或暈眩：原地不動
       const blocker = this.findBlocker(e);
       let nx = e.x - speed * dt;
       let blockedId = 0;
       if (blocker && nx <= blocker.col + 0.5 + 1e-9) {
-        nx = blocker.col + 0.5;
-        blockedId = blocker.id;
+        if (def.hopOver && !e.hopped && speed > 0) {
+          // 只跳一次：越過第一個擋路的角色，落在它左邊（最遠到 0.75，不會一跳就進村）
+          e.hopped = true;
+          const from = e.x;
+          nx = Math.max(blocker.col - 0.5, 0.75);
+          e.px = nx;
+          this.events.push({ type: 'enemyHop', id: e.id, cells: from - nx });
+        } else {
+          nx = blocker.col + 0.5;
+          blockedId = blocker.id;
+        }
       }
       if (blockedId !== e.blockedId) { e.blockedId = blockedId; e.contact = 0; }
       e.x = nx;
@@ -159,13 +171,25 @@ PD.BattleSim = class BattleSim {
     const script = this.level.script;
     while (s.nextSpawn < script.length && this.ticks(script[s.nextSpawn].t) === now) {
       const ev = script[s.nextSpawn++];
-      const def = this.enemyDefs[ev.kind];
-      s.enemies.push({
-        id: s.nextId++, kind: ev.kind, lane: ev.lane,
-        x: this.rules.spawnX, px: this.rules.spawnX, hp: def.hp, maxHp: def.hp,
-        blockedId: 0, contact: 0, burnNext: -1, burnEnd: -1, slowEnd: 0, slowFactor: 1,
-      });
+      const e = this.addEnemy(ev.kind, ev.lane, this.rules.spawnX);
+      // 第一次出現的新敵人要跳提示（普通敵人不提示）
+      if (PD.text.enemyDesc[ev.kind] && s.introduced.indexOf(ev.kind) === -1) {
+        s.introduced.push(ev.kind);
+        this.events.push({ type: 'enemyNew', id: e.id, kind: ev.kind });
+      }
     }
+  }
+
+  addEnemy(kind, lane, x) {
+    const s = this.state;
+    const def = this.enemyDefs[kind];
+    const e = {
+      id: s.nextId++, kind, lane, x, px: x, hp: def.hp, maxHp: def.hp,
+      blockedId: 0, contact: 0, burnNext: -1, burnEnd: -1, slowEnd: 0, slowFactor: 1,
+      rootEnd: 0, stunEnd: 0, hopped: false, healNext: def.heal ? s.tick + this.ticks(def.heal.every) : 0,
+    };
+    s.enemies.push(e);
+    return e;
   }
 
   inRange(u, def, e) {
@@ -204,13 +228,17 @@ PD.BattleSim = class BattleSim {
     for (let i = 0; i < list.length; i++) {
       const u = list[i];
       const def = this.cfg.units[u.kind];
+      if (u.cometAt === now) { u.cometAt = 0; this.cometStrike(u); }
       if (!def.range) continue;
 
       // 雙擊的第二下：只打同一隻，且要還在範圍內
       if (u.secondTick === now) {
         u.secondTick = -1;
         const t2 = this.findEnemy(u.secondTarget);
-        if (t2 && this.inRange(u, def, t2)) this.strike(u, def, t2, now);
+        if (t2 && this.inRange(u, def, t2)) {
+          this.strike(u, def, t2, now);
+          if (def.cleave) this.strikeOthers(u, def, t2, now);
+        }
       }
 
       let target = u.targetId ? this.findEnemy(u.targetId) : null;
@@ -222,7 +250,8 @@ PD.BattleSim = class BattleSim {
       }
       if (now >= u.fireTick) {
         this.strike(u, def, target, now);
-        u.fireTick = now + this.ticks(def.interval);
+        if (def.pierce || def.cleave) this.strikeOthers(u, def, target, now);
+        u.fireTick = now + this.ticks(this.intervalOf(u, def, now));
         if (def.secondHitDelay) {
           u.secondTick = now + this.ticks(def.secondHitDelay);
           u.secondTarget = target.id;
@@ -232,17 +261,63 @@ PD.BattleSim = class BattleSim {
     }
   }
 
+  // 技能「閃電連發」期間攻擊間隔縮短
+  intervalOf(u, def, now) {
+    return u.frenzyEnd > now ? def.interval / this.cfg.skills[u.kind].rate : def.interval;
+  }
+
+  // 穿透／橫掃：同一下也打到範圍內的其他敵人
+  strikeOthers(u, def, first, now) {
+    const list = this.state.enemies;
+    for (let i = 0; i < list.length; i++) {
+      if (list[i] !== first && this.inRange(u, def, list[i])) this.strike(u, def, list[i], now);
+    }
+  }
+
   strike(u, def, e, now) {
     e.hp -= def.damage;
     if (def.slow) {
       e.slowEnd = now + this.ticks(def.slow.seconds);
       e.slowFactor = def.slow.factor;
     }
-    if (def.burn) {
-      if (e.burnNext < 0) e.burnNext = now + this.tps;
-      e.burnEnd = now + this.ticks(def.burn.seconds);
+    if (def.burn) this.applyBurn(e, now, def.burn.seconds);
+    this.events.push({ type: 'shot', unitId: u.id, targetId: e.id, fx: def.fx, big: u.frenzyEnd > now });
+  }
+
+  // 燃燒只刷新、不疊加
+  applyBurn(e, now, seconds) {
+    if (e.burnNext < 0) e.burnNext = now + this.tps;
+    e.burnEnd = now + this.ticks(seconds);
+  }
+
+  // 火焰地毯：站在上面的敵人持續被點燃，傷害走原本的燃燒規則（每秒 1，不疊加）
+  zoneTicks(now) {
+    const s = this.state;
+    for (let z = s.zones.length - 1; z >= 0; z--) {
+      const zone = s.zones[z];
+      if (now >= zone.end) { s.zones.splice(z, 1); continue; }
+      for (let i = 0; i < s.enemies.length; i++) {
+        const e = s.enemies[i];
+        if (e.lane === zone.lane && e.x > zone.x0 + 1e-9 && e.x <= zone.x1 + 1e-9) this.applyBurn(e, now, zone.burnSeconds);
+      }
     }
-    this.events.push({ type: 'shot', unitId: u.id, targetId: e.id, fx: def.fx });
+  }
+
+  // 治療型敵人：每隔一段時間幫同一條路、附近受傷的同伴補血（暈眩時不補）
+  enemySupport(now) {
+    const list = this.state.enemies;
+    for (let i = 0; i < list.length; i++) {
+      const e = list[i];
+      const heal = this.enemyDefs[e.kind].heal;
+      if (!heal || e.hp <= 0 || e.stunEnd > now || now < e.healNext) continue;
+      e.healNext = now + this.ticks(heal.every);
+      for (let k = 0; k < list.length; k++) {
+        const o = list[k];
+        if (o === e || o.lane !== e.lane || o.hp <= 0 || o.hp >= o.maxHp || Math.abs(o.x - e.x) > heal.reach) continue;
+        o.hp = Math.min(o.maxHp, o.hp + heal.amount);
+        this.events.push({ type: 'enemyHeal', id: o.id });
+      }
+    }
   }
 
   burnTicks(now) {
@@ -264,6 +339,15 @@ PD.BattleSim = class BattleSim {
       if (e.hp > 0) continue;
       s.enemies.splice(i, 1);
       this.events.push({ type: 'enemyDown', id: e.id, kind: e.kind });
+      const def = this.enemyDefs[e.kind];
+      // 分裂：小的只往右邊冒，不會直接跑到擋路角色的左邊
+      if (def.splitInto) {
+        for (let k = 0; k < def.splitInto.count; k++) {
+          this.addEnemy(def.splitInto.kind, e.lane, Math.min(this.rules.spawnX, e.x + k * 0.45));
+        }
+        this.events.push({ type: 'enemySplit', lane: e.lane, x: e.x });
+      }
+      if (def.noOrb) continue;
       // killOrbEvery：每擊倒幾隻才掉一顆（固定節奏、不用隨機），避免打得越多錢越多
       s.kills++;
       if (s.kills % (this.tune.killOrbEvery || 1) === 0) this.addOrb(e.x, e.lane, 'enemy');
@@ -292,7 +376,7 @@ PD.BattleSim = class BattleSim {
     const every = this.ticks(this.rules.enemyContactEvery);
     for (let i = 0; i < s.enemies.length; i++) {
       const e = s.enemies[i];
-      if (!e.blockedId) continue;
+      if (!e.blockedId || e.stunEnd > s.tick) continue; // 暈眩時不攻擊
       const u = this.findUnit(e.blockedId);
       if (!u) { e.blockedId = 0; e.contact = 0; continue; }
       e.contact++;
@@ -300,6 +384,8 @@ PD.BattleSim = class BattleSim {
         e.contact = 0;
         u.hp -= this.rules.enemyContactDamage;
         this.events.push({ type: 'unitHit', id: u.id });
+        const thorns = this.cfg.units[u.kind].thorns;
+        if (thorns) { e.hp -= thorns; this.events.push({ type: 'thorns', id: e.id }); }
       }
     }
     for (let i = s.units.length - 1; i >= 0; i--) {
@@ -359,7 +445,8 @@ PD.BattleSim = class BattleSim {
     for (let i = s.orbs.length - 1; i >= 0; i--) {
       const o = s.orbs[i];
       o.age++;
-      if (o.age >= auto) this.collectOrb(i);
+      // 技能掉的球落地就自動收進，不用點
+      if (o.age >= (o.source === 'skill' ? fall : auto)) this.collectOrb(i);
     }
   }
 
@@ -368,7 +455,7 @@ PD.BattleSim = class BattleSim {
     const o = s.orbs[index];
     s.orbs.splice(index, 1);
     s.balls = Math.min(this.rules.maxBalls, s.balls + this.rules.orbValue);
-    this.events.push({ type: 'orbCollected', id: o.id });
+    this.events.push({ type: 'orbCollected', id: o.id, source: o.source });
   }
 
   checkWin() {
@@ -394,9 +481,109 @@ PD.BattleSim = class BattleSim {
         this.place(cmd);
       } else if (cmd.type === 'recall') {
         this.recall(cmd);
+      } else if (cmd.type === 'skill') {
+        this.castSkill(cmd.id);
       }
     }
     this.commands.length = 0;
+  }
+
+  // ===== 主動技能 =====
+  skillTicks(kind) { return this.ticks(this.cfg.skills[kind].cd * this.mode.skillCdMul); }
+
+  // 回傳不能施放的原因；可以放則回傳 null
+  skillProblem(u) {
+    const s = this.state;
+    if (!this.cfg.skills[u.kind]) return 'none';
+    if (s.phase !== 'battle' || s.waitingHint) return 'phase';
+    return s.tick < u.skillAt ? 'cooldown' : null;
+  }
+
+  // 剩餘冷卻比例 0～1（給畫面的圓環用）
+  skillLeft(u) {
+    return Math.max(0, Math.min(1, (u.skillAt - this.state.tick) / this.skillTicks(u.kind)));
+  }
+
+  castSkill(id) {
+    const u = this.findUnit(id);
+    if (!u || this.skillProblem(u)) return;
+    const now = this.state.tick;
+    const sk = this.cfg.skills[u.kind];
+    u.skillAt = now + this.skillTicks(u.kind);
+    const ev = { type: 'skill', id: u.id, kind: u.kind, lane: u.lane, col: u.col, hits: [] };
+    this['skill_' + u.kind](u, sk, now, ev);
+    this.events.push(ev);
+  }
+
+  enemiesNear(lanes, x0, x1) {
+    return this.state.enemies.filter((e) => e.hp > 0 && lanes.indexOf(e.lane) !== -1 && e.x > x0 + 1e-9 && e.x <= x1 + 1e-9);
+  }
+
+  // 往出怪點推回，不會推出出怪點
+  pushBack(e, cells) {
+    const to = Math.min(this.rules.spawnX, e.x + cells);
+    const moved = to - e.x;
+    e.x = to; e.px = to; e.blockedId = 0; e.contact = 0;
+    if (moved > 0) this.events.push({ type: 'enemyPushed', id: e.id, cells: moved });
+  }
+
+  skill_trainer(u, sk) {
+    for (let i = 0; i < sk.orbs; i++) this.addOrb(Math.max(0.7, u.col + (i - 1) * 0.6), u.lane, 'skill');
+  }
+
+  skill_basicShooter(u, sk, now) {
+    u.frenzyEnd = now + this.ticks(sk.seconds);
+    const def = this.cfg.units[u.kind];
+    u.fireTick = Math.min(u.fireTick, now + this.ticks(def.interval / sk.rate)); // 正在等下一發時也馬上加速
+  }
+
+  skill_burnShooter(u, sk, now) {
+    this.state.zones.push({
+      id: this.state.nextId++, lane: u.lane, x0: u.col + 0.5, x1: Math.min(u.col + 0.5 + sk.cells, 10.5),
+      start: now, end: now + this.ticks(sk.seconds), burnSeconds: sk.burnSeconds,
+    });
+  }
+
+  skill_slowShooter(u, sk, now, ev) {
+    this.enemiesNear([u.lane], u.col, this.rules.spawnX).forEach((e) => {
+      e.hp -= sk.damage;
+      e.slowEnd = now + this.ticks(sk.slowSeconds);
+      e.slowFactor = sk.slowFactor;
+      this.pushBack(e, sk.push);
+      ev.hits.push(e.id);
+    });
+  }
+
+  skill_doubleStriker(u, sk, now, ev) {
+    this.enemiesNear([u.lane - 1, u.lane, u.lane + 1], u.col, u.col + sk.reach).forEach((e) => {
+      e.hp -= sk.damage;
+      e.rootEnd = now + this.ticks(sk.rootSeconds);
+      ev.hits.push(e.id);
+    });
+  }
+
+  skill_tank(u, sk, now, ev) {
+    u.hp = Math.min(u.maxHp, u.hp + Math.round(u.maxHp * sk.heal));
+    this.enemiesNear([u.lane], u.col, u.col + sk.reach).forEach((e) => {
+      e.hp -= sk.damage;
+      e.stunEnd = now + this.ticks(sk.stunSeconds);
+      this.pushBack(e, sk.push);
+      ev.hits.push(e.id);
+    });
+  }
+
+  // 水晶彗星：先蓄力，時間到才真的打（見 unitAttacks）
+  skill_pierceShooter(u, sk, now) { u.cometAt = now + this.ticks(sk.chargeSeconds); }
+
+  cometStrike(u) {
+    const sk = this.cfg.skills[u.kind];
+    const ev = { type: 'comet', hits: [] };
+    this.state.enemies.forEach((e) => {
+      if (e.hp <= 0) return;
+      e.hp -= sk.damage;
+      ev.hits.push(e.id);
+    });
+    this.events.push(ev);
   }
 
   // 請回角色：退還原價（plan-v2 第八節），不論剩多少生命，也不觸發放置防連點
@@ -425,6 +612,9 @@ PD.BattleSim = class BattleSim {
     const unit = {
       id: s.nextId++, kind: cmd.kind, lane: cmd.lane, col: cmd.col, hp: def.hp, maxHp: def.hp,
       targetId: 0, fireTick: 0, secondTick: -1, secondTarget: 0, roundGate: 0,
+      // 剛放下的角色：技能從半冷卻開始
+      skillAt: this.cfg.skills[cmd.kind] ? s.tick + Math.round(this.skillTicks(cmd.kind) / 2) : 0,
+      frenzyEnd: 0, cometAt: 0,
       genNext: def.genEvery ? s.tick + this.ticks(this.genSeconds(def)) : 0,
     };
     s.units.push(unit);

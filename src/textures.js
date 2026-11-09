@@ -57,6 +57,41 @@ PD.TEX_SCALE = 1 / PD.RES;
     ctx.drawImage(src, (w - dw) / 2, h - dh, dw, dh);
   }
 
+  // 用已公開的貼圖做出新敵人：整張換色、加上一圈描邊、左右翻轉成面朝左。
+  // 全程用瀏覽器合成模式（iPad Safari 不支援 canvas 的 filter），不產生圖檔。
+  function drawRecolored(ctx, w, h, art, def) {
+    const make = () => {
+      const cv = document.createElement('canvas');
+      cv.width = Math.ceil(w * DENSITY);
+      cv.height = Math.ceil(h * DENSITY);
+      const c = cv.getContext('2d');
+      c.scale(DENSITY, DENSITY);
+      return { cv, c };
+    };
+    const M = 3; // 留給描邊的邊距
+    const paint = (c) => { c.save(); c.translate(M, M); drawArt(c, w - M * 2, h - M * 2, art); c.restore(); };
+    const body = make();
+    paint(body.c);
+    body.c.globalCompositeOperation = 'color';
+    body.c.fillStyle = hex(def.recolor);
+    body.c.fillRect(0, 0, w, h);
+    body.c.globalCompositeOperation = 'destination-in';
+    paint(body.c);
+    const edge = make();
+    paint(edge.c);
+    edge.c.globalCompositeOperation = 'source-in';
+    edge.c.fillStyle = hex(def.outline);
+    edge.c.fillRect(0, 0, w, h);
+    ctx.save();
+    ctx.translate(w, 0);
+    ctx.scale(-1, 1);
+    for (let a = 0; a < 8; a++) {
+      ctx.drawImage(edge.cv, Math.cos(a * Math.PI / 4) * 2, Math.sin(a * Math.PI / 4) * 2, w, h);
+    }
+    ctx.drawImage(body.cv, 0, 0, w, h);
+    ctx.restore();
+  }
+
   function poly(ctx, pts) {
     ctx.beginPath();
     pts.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])));
@@ -112,6 +147,10 @@ PD.TEX_SCALE = 1 / PD.RES;
     },
     shield(ctx, c, s, color) {
       poly(ctx, [[c - s * 0.8, -s * 0.8], [c + s * 0.8, -s * 0.8], [c + s * 0.8, s * 0.1], [c, s], [c - s * 0.8, s * 0.1]]);
+      ctx.fillStyle = color; ctx.fill(); ctx.stroke();
+    },
+    gem(ctx, c, s, color) {
+      poly(ctx, [[c, -s], [c + s * 0.85, -s * 0.45], [c + s * 0.85, s * 0.45], [c, s], [c - s * 0.85, s * 0.45], [c - s * 0.85, -s * 0.45]]);
       ctx.fillStyle = color; ctx.fill(); ctx.stroke();
     },
     badge(ctx, c, s, color) {
@@ -318,6 +357,31 @@ PD.TEX_SCALE = 1 / PD.RES;
         c.lineWidth = 1.5; c.strokeStyle = 'rgba(255,255,255,0.16)'; c.stroke();
       });
     });
+    add('hexP', 20, 20, (c) => {
+      c.fillStyle = '#fff';
+      poly(c, [0, 1, 2, 3, 4, 5].map((i) => [10 + Math.cos(i * Math.PI / 3) * 9, 10 + Math.sin(i * Math.PI / 3) * 9]));
+      c.fill();
+    });
+    add('zee', 28, 32, (c) => {
+      c.strokeStyle = '#fff'; c.lineWidth = 5; c.lineJoin = 'round';
+      c.beginPath(); c.moveTo(5, 6); c.lineTo(23, 6); c.lineTo(5, 26); c.lineTo(23, 26); c.stroke();
+    });
+    add('plus', 24, 24, (c) => { c.fillStyle = '#fff'; c.fillRect(9, 3, 6, 18); c.fillRect(3, 9, 18, 6); });
+    // 技能圓鈕：直徑 78（點擊範圍同大）
+    const SB = cfg.layout.skillBtn.size;
+    add('skillBtn', SB, SB, (c) => {
+      const g = c.createLinearGradient(0, 0, 0, SB);
+      g.addColorStop(0, '#fff'); g.addColorStop(1, '#d8d8d8');
+      c.fillStyle = g;
+      c.beginPath(); c.arc(SB / 2, SB / 2, SB / 2 - 3, 0, 7); c.fill();
+      c.lineWidth = 3; c.strokeStyle = OUTLINE; c.stroke();
+    });
+    Object.keys(cfg.units).forEach((k) => {
+      add('skillIcon_' + k, 44, 44, (c) => {
+        c.strokeStyle = OUTLINE; c.lineWidth = 2.5; c.translate(0, 22);
+        icons[cfg.units[k].icon](c, 22, 18, hex(cfg.units[k].color));
+      });
+    });
     add('iconBurn', 20, 20, (c) => { c.strokeStyle = OUTLINE; c.lineWidth = 1.5; c.translate(0, 10); icons.flame(c, 10, 8, '#ff9a3c'); });
     add('iconSlow', 20, 20, (c) => { c.strokeStyle = OUTLINE; c.lineWidth = 1.5; c.translate(0, 10); icons.drop(c, 10, 8, '#6cc7ff'); });
     add('shield', 26, 30, (c) => { c.strokeStyle = OUTLINE; c.lineWidth = 2; c.translate(0, 15); icons.shield(c, 13, 13, '#7fd0ff'); });
@@ -329,21 +393,22 @@ PD.TEX_SCALE = 1 / PD.RES;
     // 每位角色一張底卡：上方是角色主色的頭像窗，下方是放名字的白色名牌
     Object.keys(cfg.units).forEach((k) => {
       const d = cfg.units[k];
-      add('card_' + k, 136, 120, (c) => {
-        drawPanelBase(c, 136, 120, '#fdf6e0', '#e6d6ae');
-        rr(c, 9, 8, 118, 82, 12);
+      const CW = cfg.layout.cards.w;
+      add('card_' + k, CW, 120, (c) => {
+        drawPanelBase(c, CW, 120, '#fdf6e0', '#e6d6ae');
+        rr(c, 9, 8, CW - 18, 82, 12);
         const g = c.createLinearGradient(0, 8, 0, 90);
         g.addColorStop(0, hex(d.light)); g.addColorStop(1, hex(d.color));
         c.save(); c.globalAlpha = 0.7; c.fillStyle = g; c.fill(); c.restore();
         c.lineWidth = 1.5; c.strokeStyle = 'rgba(31,42,56,0.35)'; c.stroke();
-        rr(c, 9, 91, 118, 23, 8);
+        rr(c, 9, 91, CW - 18, 23, 8);
         c.fillStyle = 'rgba(255,255,255,0.75)'; c.fill();
       });
     });
     btnFrame('btnSquare', cfg.layout.muteBtn.w, cfg.layout.muteBtn.h, '#5a7a9a', '#3c566f');
     btnFrame('btnBig', 260, 130, '#ffcf5a', '#f09a2e');
     btnFrame('btnWide', 300, 92, '#ffcf5a', '#f09a2e');
-    btnFrame('cardLocked', 136, 120, '#8d97a3', '#6a7480');
+    btnFrame('cardLocked', cfg.layout.cards.w, 120, '#8d97a3', '#6a7480');
     btnFrame('cancel', 120, 120, '#f0a0a0', '#d06a6a');
     btnFrame('recall', 136, 120, '#8fd0c8', '#4f9c94');
     add('costBadge', 70, 40, (c) => {
@@ -411,10 +476,13 @@ PD.TEX_SCALE = 1 / PD.RES;
     });
     Object.keys(cfg.enemies).forEach((k) => {
       const d = cfg.enemies[k];
-      const art = scene.textures.exists('art_' + k) ? scene.textures.get('art_' + k).getSourceImage() : null;
-      add('enemy_' + k, d.size.w, d.size.h, (c) => (
-        art ? drawArt(c, d.size.w, d.size.h, art) : drawEnemy(c, d.size.w, d.size.h, d)
-      ));
+      const key = 'art_' + (d.artFrom || k);
+      const art = scene.textures.exists(key) ? scene.textures.get(key).getSourceImage() : null;
+      add('enemy_' + k, d.size.w, d.size.h, (c) => {
+        if (!art) drawEnemy(c, d.size.w, d.size.h, d);
+        else if (d.artFrom) drawRecolored(c, d.size.w, d.size.h, art, d);
+        else drawArt(c, d.size.w, d.size.h, art);
+      });
     });
     return list;
   }

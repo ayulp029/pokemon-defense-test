@@ -108,7 +108,7 @@ PD.Fx = class Fx {
     this.emit('glow', x, y, color, { vx: 0, vy: 0, life, s0: size, s1: size * 1.5, a: 0.8 });
   }
 
-  fire(fx, x0, y0, view) {
+  fire(fx, x0, y0, view, big) {
     const shot = this.shots.find((s) => !s.on);
     if (!shot) return;
     const x1 = view.c.x;
@@ -117,14 +117,14 @@ PD.Fx = class Fx {
     const dur = this.cfg.fx.projectileSeconds * (isVine ? 1.3 : 1);
     Object.assign(shot, { on: true, fx, t: 0, dur, x0, y0, x1, y1, view, viewId: view.id, landed: false });
     const frame = fx === 'lightning' ? 'bolt' : fx === 'vine' ? 'vine'
-      : fx === 'water' ? 'dropP' : 'glow';
+      : fx === 'water' ? 'dropP' : fx === 'crystal' ? 'hexP' : 'glow';
     const color = PD.Fx.COLORS[fx];
     shot.img.setFrame(frame).setPosition(x0, y0).setTint(color).setVisible(true).setAlpha(1);
     shot.img.setRotation(Math.atan2(y1 - y0, x1 - x0));
     shot.img.setOrigin(isVine ? 0 : 0.5, 0.5);
-    shot.img.setScale(fx === 'fire' ? 0.6 * PD.TEX_SCALE : PD.TEX_SCALE);
+    shot.img.setScale((fx === 'fire' ? 0.6 : big ? 2 : 1) * PD.TEX_SCALE);
     if (fx === 'water') shot.img.setRotation(Math.atan2(y1 - y0, x1 - x0) + Math.PI / 2);
-    shot.glow.setPosition(x0, y0).setTint(color).setScale((isVine ? 0.02 : 0.9) * PD.TEX_SCALE).setAlpha(0.8).setVisible(!isVine);
+    shot.glow.setPosition(x0, y0).setTint(color).setScale((isVine ? 0.02 : big ? 1.6 : 0.9) * PD.TEX_SCALE).setAlpha(0.8).setVisible(!isVine);
   }
 
   impact(fx, x, y) {
@@ -135,6 +135,7 @@ PD.Fx = class Fx {
     if (fx === 'fire') this.burst('spark', x, y, 0xff8a3c, n, 150, 0.4, 0.8, 0.1, -60);
     if (fx === 'water') this.burst('dropP', x, y, 0x7fd4ff, n, 170, 0.42, 0.6, 0.2, 380);
     if (fx === 'vine') this.burst('leafP', x, y, 0x7ee081, n, 130, 0.5, 0.7, 0.3, 160);
+    if (fx === 'crystal') this.burst('hexP', x, y, 0xbfe6ff, n, 150, 0.4, 0.8, 0.2);
   }
 
   starBurst(x, y) {
@@ -178,6 +179,12 @@ PD.Fx = class Fx {
     if (nowMs - this.lastShake < this.cfg.fx.shakeMinGapMs) return;
     this.lastShake = nowMs;
     this.scene.cameras.main.shake(this.cfg.fx.shakeMs, this.cfg.fx.shakeIntensity);
+  }
+
+  // 技能用：依規格指定的像素與毫秒；「減少特效」開啟時完全不震動，不支援時本來就只是沒有效果
+  shakePx(px, ms) {
+    if (this.reduced) return;
+    this.scene.cameras.main.shake(ms, px / this.cfg.layout.width);
   }
 
   update(dt) {
@@ -255,4 +262,4 @@ PD.Fx = class Fx {
   }
 };
 
-PD.Fx.COLORS = { lightning: 0xfff176, fire: 0xff8a3c, water: 0x6cc7ff, vine: 0x7ee081 };
+PD.Fx.COLORS = { lightning: 0xfff176, fire: 0xff8a3c, water: 0x6cc7ff, vine: 0x7ee081, crystal: 0xbfe6ff };
