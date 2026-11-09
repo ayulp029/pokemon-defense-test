@@ -15,6 +15,16 @@ PD.BattleSim = class BattleSim {
       this.enemyDefs[k] = Object.assign({}, config.enemies[k], (this.tune.enemies || {})[k]);
     });
     this.tps = Math.round(1 / this.rules.tickSeconds);
+    // 地形：lane×100＋col 對應地形種類
+    this.terrain = {};
+    (this.level.terrain || []).forEach((t) => t.lanes.forEach((lane) => t.cols.forEach((col) => {
+      this.terrain[lane * 100 + col] = config.terrainTypes[t.type];
+    })));
+    // 隊長登場前的預告：第幾格時間、哪條路
+    this.bossWarnAt = {};
+    this.level.script.forEach((ev) => {
+      if (this.enemyDefs[ev.kind].boss) this.bossWarnAt[this.ticks(Math.max(0, ev.t - this.rules.bossWarnSeconds))] = ev.lane;
+    });
     this.events = [];
     this.commands = [];
     this.snapshot = null;
@@ -29,7 +39,7 @@ PD.BattleSim = class BattleSim {
     return {
       phase: 'prep', tick: 0, balls: this.tune.startBalls || this.rules.startBalls, nextId: 1,
       nextSpawn: 0, lastSnapWave: 0, rescues: 0, placeCd: 0, kills: 0, skillAt: {},
-      waitingHint: false, skySeq: 0, units: [], enemies: [], orbs: [], zones: [], introduced: [],
+      waitingHint: false, skySeq: 0, units: [], enemies: [], orbs: [], zones: [], introduced: [], rallyEnd: 0, rallyFactor: 1,
     };
   }
 
@@ -54,6 +64,13 @@ PD.BattleSim = class BattleSim {
   }
 
   isLaneOpen(lane) { return this.level.openLanes.indexOf(lane) !== -1; }
+
+  terrainAt(lane, col) { return this.terrain[lane * 100 + col] || null; }
+
+  // 敵人腳下的地形（出怪區沒有地形）
+  terrainUnder(e) { return this.terrainAt(e.lane, Math.round(e.x)); }
+
+  cellBlocked(lane, col) { const t = this.terrainAt(lane, col); return !!(t && t.noPlace); }
 
   unitAt(lane, col) {
     const list = this.state.units;
@@ -80,6 +97,7 @@ PD.BattleSim = class BattleSim {
     if (s.phase === 'prep' && this.level.requiredToStart.indexOf(kind) === -1) return 'startersFirst';
     if (!this.isLaneOpen(lane)) return 'rest';
     if (col < 1 || col > this.cfg.layout.grid.cols) return 'outside';
+    if (this.cellBlocked(lane, col)) return 'terrain';
     if (this.unitAt(lane, col)) return 'occupied';
     if (s.placeCd > 0) return 'cooldown';
     if (s.balls < def.cost) return 'orbs';
@@ -108,6 +126,7 @@ PD.BattleSim = class BattleSim {
       if (this.mode.autoWaveHint) { s.waitingHint = true; return true; }
     }
     s.tick = now;
+    if (this.bossWarnAt[now]) this.events.push({ type: 'bossWarn', lane: this.bossWarnAt[now] });
     this.moveEnemies();
     this.spawnEnemies(now);
     this.unitAttacks(now);
@@ -132,8 +151,13 @@ PD.BattleSim = class BattleSim {
       const def = this.enemyDefs[e.kind];
       let speed = (1 / def.secPerCell) * this.mode.speedMul;
       if (e.slowEnd > s.tick) speed *= e.slowFactor;
-      if (e.rootEnd > s.tick || e.stunEnd > s.tick) speed = 0; // 被綁住或暈眩：原地不動
-      const blocker = this.findBlocker(e);
+      if (!def.flying) {
+        const ground = this.terrainUnder(e);
+        if (ground && ground.speedMul) speed *= ground.speedMul;
+      }
+      if (s.rallyEnd > s.tick) speed *= s.rallyFactor;
+      if (e.rootEnd > s.tick || e.stunEnd > s.tick || e.entryEnd > s.tick) speed = 0; // 被綁住、暈眩或登場亮相：原地不動
+      const blocker = def.flying ? null : this.findBlocker(e); // 飛行敵人不會被任何角色擋住
       let nx = e.x - speed * dt;
       let blockedId = 0;
       if (blocker && nx <= blocker.col + 0.5 + 1e-9) {
@@ -187,13 +211,18 @@ PD.BattleSim = class BattleSim {
       id: s.nextId++, kind, lane, x, px: x, hp: def.hp, maxHp: def.hp,
       blockedId: 0, contact: 0, burnNext: -1, burnEnd: -1, slowEnd: 0, slowFactor: 1,
       rootEnd: 0, stunEnd: 0, hopped: false, healNext: def.heal ? s.tick + this.ticks(def.heal.every) : 0,
+      entryEnd: def.entryPause ? s.tick + this.ticks(def.entryPause) : 0, summoned: false,
+      throwNext: def.throwAt ? s.tick + this.ticks(def.throwAt.every) : 0,
+      cloaked: false, cloakOn: false, cloakAt: def.cloak ? s.tick + this.ticks(def.cloak.visible) : 0,
+      summonNext: def.summon ? s.tick + this.ticks(def.summon.every) : 0,
+      rallyNext: def.rally ? s.tick + this.ticks(def.rally.every) : 0,
     };
     s.enemies.push(e);
     return e;
   }
 
   inRange(u, def, e) {
-    return e.hp > 0 && e.lane === u.lane &&
+    return e.hp > 0 && e.lane === u.lane && !e.cloaked && !(def.melee && this.enemyDefs[e.kind].flying) &&
       e.x > u.col + 1e-9 && e.x <= u.col + def.range + 1e-9;
   }
 
@@ -263,7 +292,9 @@ PD.BattleSim = class BattleSim {
 
   // 技能「閃電連發」期間攻擊間隔縮短
   intervalOf(u, def, now) {
-    return u.frenzyEnd > now ? def.interval / this.cfg.skills[u.kind].rate : def.interval;
+    const base = u.frenzyEnd > now ? def.interval / this.cfg.skills[u.kind].rate : def.interval;
+    const cell = this.terrainAt(u.lane, u.col);
+    return cell && cell.fireRate ? base * cell.fireRate : base;
   }
 
   // 穿透／橫掃：同一下也打到範圍內的其他敵人
@@ -298,6 +329,7 @@ PD.BattleSim = class BattleSim {
       if (now >= zone.end) { s.zones.splice(z, 1); continue; }
       for (let i = 0; i < s.enemies.length; i++) {
         const e = s.enemies[i];
+        if (this.enemyDefs[e.kind].flying) continue; // 火帶在地上，燒不到飛的
         if (e.lane === zone.lane && e.x > zone.x0 + 1e-9 && e.x <= zone.x1 + 1e-9) this.applyBurn(e, now, zone.burnSeconds);
       }
     }
@@ -306,6 +338,7 @@ PD.BattleSim = class BattleSim {
   // 治療型敵人：每隔一段時間幫同一條路、附近受傷的同伴補血（暈眩時不補）
   enemySupport(now) {
     const list = this.state.enemies;
+    for (let i = 0; i < list.length; i++) this.enemyAbilities(list[i], now);
     for (let i = 0; i < list.length; i++) {
       const e = list[i];
       const heal = this.enemyDefs[e.kind].heal;
@@ -318,6 +351,59 @@ PD.BattleSim = class BattleSim {
         this.events.push({ type: 'enemyHeal', id: o.id });
       }
     }
+  }
+
+  // 隱身輪替、丟球、召喚、敲鼓。暈眩中的敵人不做主動行為，但隱身計時照走
+  enemyAbilities(e, now) {
+    const def = this.enemyDefs[e.kind];
+    if (e.hp <= 0) return;
+    if (def.cloak) {
+      if (now >= e.cloakAt) {
+        e.cloakOn = !e.cloakOn;
+        e.cloakAt = now + this.ticks(e.cloakOn ? def.cloak.hidden : def.cloak.visible);
+      }
+      const ground = this.terrainUnder(e);
+      e.cloaked = e.cloakOn && !(ground && ground.reveal);
+    }
+    if (e.stunEnd > now) return;
+    if (def.throwAt && now >= e.throwNext) {
+      const u = this.throwTarget(e, def.throwAt.reach);
+      if (u) {
+        e.throwNext = now + this.ticks(def.throwAt.every);
+        u.hp -= def.throwAt.damage;
+        this.events.push({ type: 'enemyThrow', id: e.id, unitId: u.id });
+      }
+    }
+    if (def.summon && now >= e.summonNext) {
+      e.summonNext = now + this.ticks(def.summon.every);
+      const alive = this.state.enemies.filter((o) => o.summoned).length;
+      const n = Math.min(def.summon.count, Math.max(0, def.summon.maxAlive - alive));
+      for (let k = 0; k < n; k++) {
+        const m = this.addEnemy(def.summon.kind, e.lane, Math.min(this.rules.spawnX, e.x + 0.6 + k * 0.45));
+        m.summoned = true;
+      }
+      if (n) this.events.push({ type: 'enemySummon', id: e.id });
+    }
+    if (def.rally && now >= e.rallyNext) {
+      e.rallyNext = now + this.ticks(def.rally.every);
+      this.state.rallyEnd = now + this.ticks(def.rally.seconds);
+      this.state.rallyFactor = def.rally.factor;
+      this.events.push({ type: 'enemyRally', id: e.id });
+    }
+  }
+
+  // 同路、前方 reach 格內最近的遠攻角色（近戰與不攻擊的角色不算）
+  throwTarget(e, reach) {
+    let best = null;
+    const list = this.state.units;
+    for (let i = 0; i < list.length; i++) {
+      const u = list[i];
+      const def = this.cfg.units[u.kind];
+      if (u.lane !== e.lane || !def.range || def.melee || u.hp <= 0) continue;
+      if (u.col >= e.x || e.x - u.col > reach + 1e-9) continue;
+      if (!best || u.col > best.col) best = u;
+    }
+    return best;
   }
 
   burnTicks(now) {
@@ -347,7 +433,11 @@ PD.BattleSim = class BattleSim {
         }
         this.events.push({ type: 'enemySplit', lane: e.lane, x: e.x });
       }
-      if (def.noOrb) continue;
+      if (def.noOrb || e.summoned) continue; // 被召喚的小兵不掉球，避免靠隊長刷球
+      if (def.orbDrop) {
+        for (let k = 0; k < def.orbDrop; k++) this.addOrb(Math.max(1, Math.min(10, e.x - k * 0.6)), e.lane, 'enemy');
+        continue;
+      }
       // killOrbEvery：每擊倒幾隻才掉一顆（固定節奏、不用隨機），避免打得越多錢越多
       s.kills++;
       if (s.kills % (this.tune.killOrbEvery || 1) === 0) this.addOrb(e.x, e.lane, 'enemy');
@@ -382,7 +472,7 @@ PD.BattleSim = class BattleSim {
       e.contact++;
       if (e.contact >= every) {
         e.contact = 0;
-        u.hp -= this.rules.enemyContactDamage;
+        u.hp -= this.enemyDefs[e.kind].contactDamage || this.rules.enemyContactDamage;
         this.events.push({ type: 'unitHit', id: u.id });
         const thorns = this.cfg.units[u.kind].thorns;
         if (thorns) { e.hp -= thorns; this.events.push({ type: 'thorns', id: e.id }); }
@@ -402,7 +492,7 @@ PD.BattleSim = class BattleSim {
       const e = s.enemies[i];
       if (e.x > this.rules.villageX + 1e-9) continue;
       s.enemies.splice(i, 1);
-      s.rescues++;
+      s.rescues += this.enemyDefs[e.kind].homeCost || 1;
       this.events.push({ type: 'enemyHome', id: e.id });
       if (s.rescues > this.mode.rescues) {
         s.phase = 'failed';
@@ -536,12 +626,15 @@ PD.BattleSim = class BattleSim {
     this.events.push(ev);
   }
 
-  enemiesNear(lanes, x0, x1) {
-    return this.state.enemies.filter((e) => e.hp > 0 && lanes.indexOf(e.lane) !== -1 && e.x > x0 + 1e-9 && e.x <= x1 + 1e-9);
+  // 指定目標的招式打不到隱身敵人；groundOnly＝近身招，打不到飛行敵人
+  enemiesNear(lanes, x0, x1, groundOnly) {
+    return this.state.enemies.filter((e) => e.hp > 0 && !e.cloaked && !(groundOnly && this.enemyDefs[e.kind].flying) &&
+      lanes.indexOf(e.lane) !== -1 && e.x > x0 + 1e-9 && e.x <= x1 + 1e-9);
   }
 
   // 往出怪點推回，不會推出出怪點
   pushBack(e, cells) {
+    if (this.enemyDefs[e.kind].boss) return; // 隊長太重，推不動
     const to = Math.min(this.rules.spawnX, e.x + cells);
     const moved = to - e.x;
     e.x = to; e.px = to; e.blockedId = 0; e.contact = 0;
@@ -576,7 +669,7 @@ PD.BattleSim = class BattleSim {
   }
 
   skill_doubleStriker(u, sk, now, ev) {
-    this.enemiesNear([u.lane - 1, u.lane, u.lane + 1], u.col, u.col + sk.reach).forEach((e) => {
+    this.enemiesNear([u.lane - 1, u.lane, u.lane + 1], u.col, u.col + sk.reach, true).forEach((e) => {
       e.hp -= sk.damage;
       e.rootEnd = now + this.ticks(sk.rootSeconds);
       ev.hits.push(e.id);
@@ -585,7 +678,7 @@ PD.BattleSim = class BattleSim {
 
   skill_tank(u, sk, now, ev) {
     u.hp = Math.min(u.maxHp, u.hp + Math.round(u.maxHp * sk.heal));
-    this.enemiesNear([u.lane], u.col, u.col + sk.reach).forEach((e) => {
+    this.enemiesNear([u.lane], u.col, u.col + sk.reach, true).forEach((e) => {
       e.hp -= sk.damage;
       e.stunEnd = now + this.ticks(sk.stunSeconds);
       this.pushBack(e, sk.push);

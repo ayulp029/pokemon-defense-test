@@ -27,6 +27,12 @@ window.PD = window.PD || {};
     jumper: '彈跳蜥',
     splitter: '雙胞搗蛋',
     splitling: '小搗蛋',
+    // 第 4～6 關的新敵人（同樣用四張已公開貼圖重新上色，再用程式畫配件）
+    flyer: '飄飄翼',
+    lobber: '丟丟猴',
+    phantom: '躲躲影',
+    boss: '鐵鎚隊長',
+    finalBoss: '搗蛋大王',
     // 主動技能
     skill_trainer: '能量大豐收',
     skill_basicShooter: '閃電連發',
@@ -101,6 +107,20 @@ window.PD = window.PD || {};
       healer: '會幫旁邊的同伴補血，先打它',
       jumper: '會跳過第一個擋路的朋友',
       splitter: '打倒後會變成兩隻小的',
+      flyer: '會飛過前排！要靠會射遠的朋友打它',
+      lobber: '會丟球打後面射遠的朋友，先打它',
+      phantom: '會突然隱身，亮起來時再打它',
+      boss: '又大又硬，還會叫小兵來幫忙',
+      finalBoss: '搗蛋團的大王！大家一起加油',
+    },
+    terrainNoPlace: '這裡不能放朋友喔',
+    bossComing: '隊長要來了，準備好！',
+    rallyHint: '咚咚咚！敵人走快了',
+    levelTipTitle: '這一關的場地',
+    levelTip: {
+      4: '小河裡不能放朋友，敵人過河會變慢',
+      5: '燈籠格上的朋友打得快，隱身的敵人也藏不住',
+      6: '營地那一排不能放朋友，敵人踩到鼓墊會變快',
     },
     skillWait: '還要等一下才能再用',
     skillReady: '可以放招了！點左邊的圖示',
@@ -135,7 +155,8 @@ window.PD = window.PD || {};
     skillBar: { x: 60, firstY: 130, gap: 82, size: 72, hit: 78 },
     // 大地圖選關：每一關的圓鈕中心，點擊範圍是圓鈕外的正方形（200×200）
     map: {
-      nodes: [{ x: 230, y: 500 }, { x: 590, y: 320 }, { x: 950, y: 500 }],
+      // 蛇行兩排：上排第 1～3 關往右，下排第 4～6 關往左；上下排相距 280，點擊範圍不重疊
+      nodes: [{ x: 210, y: 290 }, { x: 590, y: 290 }, { x: 970, y: 290 }, { x: 970, y: 570 }, { x: 590, y: 570 }, { x: 210, y: 570 }],
       nodeHit: 200,
       backBtn: { x: 20, y: 16, w: 170, h: 84 },
     },
@@ -158,7 +179,7 @@ window.PD = window.PD || {};
       idleSheet: { file: 'basicShooter-idle', frames: 6, frameMs: 140 },
     },
     doubleStriker: {
-      cost: 100, hp: 8, range: 2, interval: 2, damage: 2, secondHitDelay: 0.3, cleave: true, fx: 'vine',
+      cost: 100, hp: 8, range: 2, interval: 2, damage: 2, secondHitDelay: 0.3, cleave: true, melee: true, fx: 'vine', // melee＝打不到飛行敵人
       size: { w: 70, h: 100 }, color: 0x46b868, light: 0xc6f2c8, icon: 'leaf',
     },
     tank: {
@@ -219,6 +240,42 @@ window.PD = window.PD || {};
     jumper: { hp: 6, secPerCell: 3, size: { w: 72, h: 80 }, color: 0x35b5a8, light: 0xc8f5ee, shape: 'swift', artFrom: 'burnShooter', recolor: 0x2fc4b4, outline: 0x0d5a55, hopOver: true },
     splitter: { hp: 9, secPerCell: 3.25, size: { w: 58, h: 96 }, color: 0xd9544f, light: 0xffd9d0, shape: 'robot', artFrom: 'trainer', recolor: 0xe2453c, outline: 0x7a1414, splitInto: { kind: 'splitling', count: 2 } },
     splitling: { hp: 3, secPerCell: 2.6, size: { w: 40, h: 66 }, color: 0xf0817a, light: 0xffe4df, shape: 'robot', artFrom: 'trainer', recolor: 0xf26a5e, outline: 0x7a1414, noOrb: true },
+    // ===== 第 4～6 關（建議值，尚未實測）=====
+    // accessory＝程式畫的配件（textures.js），bodyBox＝本體在圖框裡的位置（留空間給配件）
+    // flying：不被任何角色擋住，近戰打不到；throwAt：邊走邊丟球打同路前方的遠攻角色；cloak：顯形／隱身輪流（秒）
+    flyer: {
+      hp: 5, secPerCell: 3.4, size: { w: 92, h: 82 }, bodyBox: { x: 18, y: 16, w: 56, h: 66 }, color: 0x7fa8ff, light: 0xdce8ff, shape: 'swift',
+      artFrom: 'burnShooter', recolor: 0x6f9bff, outline: 0x1f3f8a, accessory: 'wings', flying: true, hover: 34,
+    },
+    lobber: {
+      hp: 7, secPerCell: 3.6, size: { w: 66, h: 100 }, bodyBox: { x: 2, y: 18, w: 62, h: 82 }, color: 0xf2b134, light: 0xfff0c8, shape: 'stripe',
+      artFrom: 'doubleStriker', recolor: 0xf0a91e, outline: 0x7a4a05, accessory: 'hat', throwAt: { every: 4, damage: 2, reach: 5 },
+    },
+    phantom: {
+      hp: 7, secPerCell: 3.25, size: { w: 66, h: 100 }, color: 0x7a70d8, light: 0xe4e0ff, shape: 'stripe',
+      artFrom: 'trainer', recolor: 0x6a5fd6, outline: 0x2a2470, accessory: 'mask', cloak: { visible: 3, hidden: 2.5 },
+    },
+    // boss：大血條、不會被推回；entryPause＝登場先站一下；homeCost＝走進村莊算掉幾次救援；orbDrop＝打倒掉幾顆球
+    boss: {
+      hp: 80, secPerCell: 9, size: { w: 112, h: 132 }, bodyBox: { x: 12, y: 18, w: 90, h: 114 }, color: 0xd9892b, light: 0xffe2b0, shape: 'plated',
+      artFrom: 'tank', recolor: 0xdc8a22, outline: 0x6a3a06, accessory: 'captain', boss: true, entryPause: 0.6,
+      contactDamage: 4, homeCost: 2, orbDrop: 3, summon: { kind: 'scout', count: 1, every: 9, maxAlive: 6 }, aura: 0xffb347,
+    },
+    finalBoss: {
+      hp: 260, secPerCell: 11, size: { w: 140, h: 164 }, bodyBox: { x: 14, y: 30, w: 116, h: 134 }, color: 0xb13fb0, light: 0xf8d2f4, shape: 'plated',
+      artFrom: 'tank', recolor: 0xb83fc0, outline: 0x4a0f58, accessory: 'king', boss: true, entryPause: 0.6,
+      contactDamage: 5, homeCost: 4, orbDrop: 3, summon: { kind: 'tough', count: 2, every: 11, maxAlive: 8 }, rally: { every: 16, seconds: 4, factor: 1.4 }, aura: 0xd070ff,
+    },
+  };
+
+  // ===== 地形（第 4～6 關，資料式）=====
+  // noPlace：不能放角色；speedMul：地面敵人經過時的走速倍率（飛行敵人不受影響）
+  // fireRate：站在這格的角色攻擊間隔倍率；reveal：隱身敵人走到這格藏不住
+  const terrainTypes = {
+    water: { noPlace: true, speedMul: 0.7 },
+    lantern: { fireRate: 0.75, reveal: true },
+    camp: { noPlace: true },
+    drumPad: { speedMul: 1.35 },
   };
 
   // ===== 關卡 =====
@@ -227,14 +284,25 @@ window.PD = window.PD || {};
   const LANE_ORDER = [1, 3, 2, 4];
   function makeScript(waves) {
     const script = [];
+    let count = 0;
     waves.forEach((w, i) => {
       w.kinds.forEach((kind, k) => {
-        script.push({ t: w.at + k * w.gap, wave: i + 1, lane: LANE_ORDER[script.length % LANE_ORDER.length], kind });
+        script.push({ t: w.at + k * w.gap, wave: i + 1, lane: LANE_ORDER[count++ % LANE_ORDER.length], kind });
       });
+      // boss：這一波固定走哪條路（不佔平均分配的順序），after＝波開始後幾秒登場
+      if (w.boss) script.push({ t: w.at + (w.boss.after || 0), wave: i + 1, lane: w.boss.lane, kind: w.boss.kind });
     });
-    return script;
+    return script.sort((a, b) => a.t - b.t); // 規則依時間順序出怪；同時間維持原順序
   }
   const many = (kind, n) => Array(n).fill(kind);
+  const loop = (kinds, n) => [].concat(...Array(n).fill(kinds));
+  // 第 4 關起共用的敵人數值（和第 3 關同級）
+  const LATE_ENEMIES = {
+    scout: { secPerCell: 3.25, hp: 5 },
+    tough: { secPerCell: 3.25, hp: 8 },
+    runner: { secPerCell: 2, hp: 5 },
+    armored: { secPerCell: 5, hp: 14 },
+  };
 
   const levels = [
     {
@@ -299,6 +367,81 @@ window.PD = window.PD || {};
         { at: 162, gap: 0.5, kinds: [].concat(...Array(8).fill(['bruiser', 'splitter', 'jumper', 'healer'])) }, // 終局波
       ]),
     },
+    {
+      // 第 4 關・水岸黃昏：第 6 欄是小河，不能放角色、地面敵人走得慢
+      number: 4,
+      openLanes: [1, 2, 3, 4],
+      requiredToStart: ['trainer', 'basicShooter'],
+      tutorial: { trainer: { lane: 1, col: 1 }, basicShooter: { lane: 1, col: 5 } },
+      terrain: [{ type: 'water', lanes: [1, 2, 3, 4], cols: [6] }],
+      theme: {
+        grassA: ['#7CB8A0', '#5F9A86'], grassB: ['#6AAF96', '#4E8F7A'], rest: ['#8AA29A', '#78908A'],
+        spawn: ['#3A5F8A', '#243B5C'], village: ['#E2C39A', '#C4A074'], pennants: ['#FFD84A', '#7FD4FF'],
+        warm: '180,220,255', warmAlpha: 0.14, path: '170,200,210', pathAlpha: 0.22, flower: 'reed', flowerChance: 0.22, decor: 'ripple',
+      },
+      tune: { skyOrbEvery: 13, genEvery: 13, killOrbEvery: 2, enemies: LATE_ENEMIES },
+      script: makeScript([
+        { at: 16, gap: 5, kinds: ['scout', 'tough', 'scout', 'scout'] },
+        { at: 48, gap: 4.5, kinds: ['flyer', 'scout', 'flyer', 'tough', 'scout', 'flyer'] },
+        { at: 84, gap: 3.5, kinds: ['lobber', 'tough', 'bruiser', 'flyer', 'lobber', 'healer', 'tough', 'flyer'] },
+        { at: 120, gap: 2.6, kinds: loop(['tough', 'flyer', 'lobber', 'jumper'], 3) },
+        { at: 158, gap: 3, kinds: loop(['tough', 'flyer', 'healer'], 3), boss: { kind: 'boss', lane: 3 } }, // 隊長波
+        { at: 206, gap: 0.55, kinds: loop(['tough', 'flyer', 'bruiser', 'lobber'], 8) }, // 終局波
+      ]),
+    },
+    {
+      // 第 5 關・夜燈果園：燈籠格讓角色打得快，也讓隱身敵人現形
+      number: 5,
+      openLanes: [1, 2, 3, 4],
+      requiredToStart: ['trainer', 'basicShooter'],
+      tutorial: { trainer: { lane: 1, col: 1 }, basicShooter: { lane: 1, col: 6 } },
+      terrain: [
+        { type: 'lantern', lanes: [1, 3], cols: [4, 8] },
+        { type: 'lantern', lanes: [2, 4], cols: [6] },
+      ],
+      theme: {
+        grassA: ['#4F7358', '#3A5744'], grassB: ['#46684F', '#334D3D'], rest: ['#5A6A60', '#4A5850'],
+        spawn: ['#2A1F3D', '#151022'], village: ['#8B7355', '#5E4A36'], pennants: ['#FFB86B', '#C9A0FF'],
+        chromeTop: ['#1B2438', '#152033'], chromeBot: ['#1B2438', '#152033'],
+        warm: '255,210,140', warmAlpha: 0.16, edgeAlpha: 0.38, flower: 'fruit', flowerChance: 0.3, decor: 'lantern',
+      },
+      tune: { skyOrbEvery: 13, genEvery: 13, killOrbEvery: 2, enemies: LATE_ENEMIES },
+      script: makeScript([
+        { at: 16, gap: 5, kinds: ['tough', 'scout', 'phantom', 'scout'] },
+        { at: 48, gap: 4, kinds: ['phantom', 'tough', 'phantom', 'flyer', 'armored', 'phantom'] },
+        { at: 84, gap: 3.2, kinds: ['armored', 'phantom', 'lobber', 'healer', 'phantom', 'flyer', 'tough', 'armored', 'phantom'] },
+        { at: 120, gap: 2.4, kinds: loop(['phantom', 'splitter', 'flyer', 'lobber'], 3) },
+        { at: 156, gap: 2.8, kinds: loop(['phantom', 'tough', 'healer', 'flyer'], 3), boss: { kind: 'boss', lane: 2 } }, // 隊長波
+        { at: 208, gap: 0.5, kinds: loop(['armored', 'phantom', 'flyer', 'lobber', 'splitter'], 7) }, // 終局波
+      ]),
+    },
+    {
+      // 第 6 關・帳篷決戰：第 10 欄是搗蛋團營地，鼓墊讓敵人變快；最後一波是大王
+      number: 6,
+      openLanes: [1, 2, 3, 4],
+      requiredToStart: ['trainer', 'basicShooter'],
+      tutorial: { trainer: { lane: 1, col: 1 }, basicShooter: { lane: 1, col: 6 } },
+      terrain: [
+        { type: 'camp', lanes: [1, 2, 3, 4], cols: [10] },
+        { type: 'drumPad', lanes: [1, 3], cols: [8] },
+        { type: 'drumPad', lanes: [2, 4], cols: [5] },
+      ],
+      theme: {
+        grassA: ['#8AAE72', '#6F945C'], grassB: ['#80A469', '#678A55'], rest: ['#8D998C', '#79857A'],
+        spawn: ['#6B3F7A', '#3E2450'], spawnMist: 'rgba(255,200,230,0.12)', pennants: ['#FF8E6E', '#FFE082'],
+        warm: '255,244,200', warmAlpha: 0.2, flower: 'flower', flowerChance: 0.3, decor: 'tent',
+      },
+      tune: { skyOrbEvery: 12, genEvery: 12, killOrbEvery: 2, enemies: LATE_ENEMIES },
+      script: makeScript([
+        { at: 16, gap: 4.5, kinds: ['tough', 'flyer', 'scout', 'phantom', 'tough'] },
+        { at: 46, gap: 3.6, kinds: ['armored', 'lobber', 'phantom', 'flyer', 'splitter', 'tough', 'jumper'] },
+        { at: 80, gap: 3, kinds: loop(['bruiser', 'phantom', 'flyer', 'lobber'], 3) },
+        { at: 120, gap: 3, kinds: loop(['tough', 'flyer', 'healer'], 3), boss: { kind: 'boss', lane: 3 } }, // 隊長波
+        { at: 166, gap: 2, kinds: loop(['splitter', 'phantom', 'flyer', 'lobber', 'jumper'], 3) },
+        { at: 202, gap: 1, kinds: loop(['armored', 'flyer', 'phantom', 'lobber'], 5) },
+        { at: 240, gap: 2.4, kinds: loop(['tough', 'phantom', 'flyer', 'healer'], 5), boss: { kind: 'finalBoss', lane: 2 } }, // 大王波
+      ]),
+    },
   ];
 
   const modes = {
@@ -312,7 +455,7 @@ window.PD = window.PD || {};
   PD.makeScript = makeScript; // 自動試玩試算不同的波次時也用同一套排路線的規則
   PD.text = text;
   PD.config = {
-    layout, units, cardOrder, enemies, levels, modes, skills,
+    layout, units, cardOrder, enemies, levels, modes, skills, terrainTypes,
     speedSteps: [1, 2, 3], // 速度鈕循環的倍率
     rules: {
       tickSeconds: 0.05,
@@ -327,6 +470,7 @@ window.PD = window.PD || {};
       lockWait: 0.5,
       enemyContactEvery: 2,
       enemyContactDamage: 2,
+      bossWarnSeconds: 1.2, // 隊長登場前，出怪區先輕輕脈衝
     },
     fx: {
       maxParticles: 200,
