@@ -12,7 +12,7 @@ PD.BootScene = class BootScene extends Phaser.Scene {
   // 本機貼圖（我方與敵人）：不存在的檔案載入失敗就略過，該角色自動用色塊
   preload() {
     // 用 artFrom 重新上色的敵人沒有自己的檔案，不用載入
-    [...PD.config.cardOrder, ...Object.keys(PD.config.enemies).filter((k) => !PD.config.enemies[k].artFrom)]
+    [...PD.config.cardOrder.filter((k) => !PD.config.units[k].noArt), ...Object.keys(PD.config.enemies).filter((k) => !PD.config.enemies[k].artFrom)]
       .forEach((k) => this.load.image('art_' + k, 'assets/local-art/' + k + '.png'));
     // 待機動畫只載入事先確認存在的檔案（見下方 probeIdleSheets）
     Object.keys(PD.idleSheetFound).forEach((k) => {

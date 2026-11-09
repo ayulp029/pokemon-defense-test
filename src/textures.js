@@ -57,6 +57,16 @@ PD.TEX_SCALE = 1 / PD.RES;
     ctx.drawImage(src, (w - dw) / 2, h - dh, dw, dh);
   }
 
+  // 依角色的 artBox 只取來源圖的一塊（可超出原圖，多的地方是透明邊距）
+  function cropArt(img, box) {
+    if (!box) return img;
+    const cv = document.createElement('canvas');
+    cv.width = box.w;
+    cv.height = box.h;
+    cv.getContext('2d').drawImage(img, -box.x, -box.y);
+    return cv;
+  }
+
   // 用已公開的貼圖做出新敵人：整張換色、加上一圈描邊、左右翻轉成面朝左。
   // 全程用瀏覽器合成模式（iPad Safari 不支援 canvas 的 filter），不產生圖檔。
   function drawRecolored(ctx, w, h, art, def) {
@@ -260,6 +270,87 @@ PD.TEX_SCALE = 1 / PD.RES;
     star(ctx, c, c, r * 0.5, r * 0.22); ctx.fill();
   }
 
+  // 技能圖示的圓底：徑向漸層＋4 白邊＋2 深色外框（dim＝冷卻中再疊一層暗色）
+  function drawSkillBase(c, s, c0, c1, border, dim) {
+    const m = s / 2;
+    const g = c.createRadialGradient(m, m, 2, m, m, 30);
+    g.addColorStop(0, c0); g.addColorStop(1, c1);
+    c.fillStyle = g;
+    c.beginPath(); c.arc(m, m, 31, 0, 7); c.fill();
+    if (dim) { c.fillStyle = 'rgba(0,0,0,0.45)'; c.fill(); }
+    c.lineWidth = 4; c.strokeStyle = border;
+    c.beginPath(); c.arc(m, m, 32, 0, 7); c.stroke();
+    c.lineWidth = 2; c.strokeStyle = '#263238';
+    c.beginPath(); c.arc(m, m, 35, 0, 7); c.stroke();
+  }
+
+  // 把顏色往灰色拉（冷卻中的底色）
+  function desaturate(h) {
+    const n = parseInt(h.slice(1), 16);
+    const rgb = [n >> 16, (n >> 8) & 255, n & 255];
+    const gray = rgb[0] * 0.3 + rgb[1] * 0.59 + rgb[2] * 0.11;
+    return 'rgb(' + rgb.map((v) => Math.round(v + (gray - v) * 0.7)).join(',') + ')';
+  }
+
+  // 七個技能圖案（44×44，白色粗圖形＋2 深色描邊）。小勇是星星徽章（擁有者要求：不可像精靈球，所以不畫圓球）
+  const skillArt = {
+    trainer(c) {
+      [-34, 0, 34].forEach((deg) => {
+        const a = (deg - 90) * Math.PI / 180;
+        const line = () => { c.beginPath(); c.moveTo(22 + Math.cos(a) * 16, 27 + Math.sin(a) * 16); c.lineTo(22 + Math.cos(a) * 24, 27 + Math.sin(a) * 24); c.stroke(); };
+        c.lineWidth = 6; c.strokeStyle = OUTLINE; line();
+        c.lineWidth = 3; c.strokeStyle = '#fff'; line();
+      });
+      c.lineWidth = 2; c.strokeStyle = OUTLINE;
+      star(c, 22, 27, 15, 7); c.fillStyle = '#fff'; c.fill(); c.stroke();
+      star(c, 22, 27, 7, 3); c.fillStyle = '#F9A825'; c.fill();
+    },
+    basicShooter(c) {
+      poly(c, [[27, 2], [9, 25], [20, 25], [15, 42], [35, 17], [24, 17], [31, 2]]);
+      c.fillStyle = '#fff'; c.fill(); c.stroke();
+    },
+    burnShooter(c) {
+      c.save(); c.translate(0, 23); icons.flame(c, 22, 20, '#fff'); c.restore();
+      c.save(); c.translate(0, 31); c.lineWidth = 1.5; icons.flame(c, 22, 10, '#FFE082'); c.restore();
+    },
+    slowShooter(c) {
+      c.beginPath();
+      c.moveTo(4, 37);
+      c.bezierCurveTo(6, 20, 18, 8, 30, 9);
+      c.bezierCurveTo(38, 10, 43, 17, 39, 24);
+      c.bezierCurveTo(36, 18, 31, 16, 27, 19);
+      c.bezierCurveTo(22, 23, 23, 31, 29, 33);
+      c.bezierCurveTo(33, 35, 38, 35, 41, 35);
+      c.lineTo(41, 41); c.lineTo(4, 41); c.closePath();
+      c.fillStyle = '#fff'; c.fill(); c.stroke();
+      [[8, 15, 3.5], [15, 6, 2.5]].forEach((b) => { c.beginPath(); c.arc(b[0], b[1], b[2], 0, 7); c.fill(); c.stroke(); });
+    },
+    doubleStriker(c) {
+      const vine = () => { c.beginPath(); c.moveTo(29, 5); c.bezierCurveTo(5, 11, 39, 27, 15, 39); c.stroke(); };
+      c.lineWidth = 10; c.strokeStyle = OUTLINE; vine();
+      c.lineWidth = 7; c.strokeStyle = '#fff'; vine();
+      c.lineWidth = 2; c.strokeStyle = OUTLINE; c.fillStyle = '#fff';
+      [[35, 24, -0.6], [9, 19, 0.6]].forEach((l) => { c.beginPath(); c.ellipse(l[0], l[1], 7.5, 4.5, l[2], 0, 7); c.fill(); c.stroke(); });
+    },
+    tank(c) {
+      c.fillStyle = '#fff';
+      c.beginPath(); c.ellipse(22, 25, 11.5, 9.5, 0, 0, 7); c.fill(); c.stroke();
+      [[9, 15], [17, 9], [27, 9], [35, 15]].forEach((p) => { c.beginPath(); c.arc(p[0], p[1], 4.5, 0, 7); c.fill(); c.stroke(); });
+      [[12, 38, 18, 41], [32, 38, 26, 41]].forEach((l) => {
+        c.lineWidth = 6; c.strokeStyle = OUTLINE; c.beginPath(); c.moveTo(l[0], l[1]); c.lineTo(l[2], l[3]); c.stroke();
+        c.lineWidth = 3; c.strokeStyle = '#fff'; c.stroke();
+      });
+    },
+    pierceShooter(c) {
+      poly(c, [[19, 3], [7, 22], [19, 41]]); c.fillStyle = '#fff'; c.fill();
+      poly(c, [[19, 3], [31, 22], [19, 41]]); c.fillStyle = '#B3E5FC'; c.fill();
+      poly(c, [[19, 3], [31, 22], [19, 41], [7, 22]]); c.stroke();
+      c.beginPath(); c.moveTo(19, 3); c.lineTo(19, 41); c.stroke();
+      poly(c, [[37, 3], [38.8, 8.2], [44, 10], [38.8, 11.8], [37, 17], [35.2, 11.8], [30, 10], [35.2, 8.2]]);
+      c.fillStyle = '#fff'; c.lineWidth = 1.5; c.fill(); c.stroke();
+    },
+  };
+
   // 按鈕與卡片共用的底：漸層、外框、上方亮面、下方厚度、內側細線
   function drawPanelBase(c, w, h, top, bottom) {
     rr(c, 3, 3, w - 6, h - 6, 18);
@@ -367,21 +458,16 @@ PD.TEX_SCALE = 1 / PD.RES;
       c.beginPath(); c.moveTo(5, 6); c.lineTo(23, 6); c.lineTo(5, 26); c.lineTo(23, 26); c.stroke();
     });
     add('plus', 24, 24, (c) => { c.fillStyle = '#fff'; c.fillRect(9, 3, 6, 18); c.fillRect(3, 9, 18, 6); });
-    // 技能圓鈕：直徑 78（點擊範圍同大）
-    const SB = cfg.layout.skillBtn.size;
-    add('skillBtn', SB, SB, (c) => {
-      const g = c.createLinearGradient(0, 0, 0, SB);
-      g.addColorStop(0, '#fff'); g.addColorStop(1, '#d8d8d8');
-      c.fillStyle = g;
-      c.beginPath(); c.arc(SB / 2, SB / 2, SB / 2 - 3, 0, 7); c.fill();
-      c.lineWidth = 3; c.strokeStyle = OUTLINE; c.stroke();
+    // 常駐技能圖示（docs/skill-icons-v1.md）：亮底、暗底、鎖住底，加上一張白色圖案
+    const BAR = cfg.layout.skillBar.size;
+    const BF = BAR + 4;
+    Object.keys(cfg.skills).forEach((k) => {
+      const [c0, c1] = cfg.skills[k].bar;
+      add('skillBase_' + k, BF, BF, (c) => drawSkillBase(c, BF, c0, c1, '#ffffff', false));
+      add('skillDim_' + k, BF, BF, (c) => drawSkillBase(c, BF, desaturate(c0), desaturate(c1), '#a4acb5', true));
+      add('skillArt_' + k, 44, 44, (c) => { c.strokeStyle = OUTLINE; c.lineWidth = 2; c.lineJoin = 'round'; c.lineCap = 'round'; skillArt[k](c); });
     });
-    Object.keys(cfg.units).forEach((k) => {
-      add('skillIcon_' + k, 44, 44, (c) => {
-        c.strokeStyle = OUTLINE; c.lineWidth = 2.5; c.translate(0, 22);
-        icons[cfg.units[k].icon](c, 22, 18, hex(cfg.units[k].color));
-      });
-    });
+    add('skillLocked', BF, BF, (c) => drawSkillBase(c, BF, '#9aa5b0', '#5f6a75', '#c9ced6', false));
     add('iconBurn', 20, 20, (c) => { c.strokeStyle = OUTLINE; c.lineWidth = 1.5; c.translate(0, 10); icons.flame(c, 10, 8, '#ff9a3c'); });
     add('iconSlow', 20, 20, (c) => { c.strokeStyle = OUTLINE; c.lineWidth = 1.5; c.translate(0, 10); icons.drop(c, 10, 8, '#6cc7ff'); });
     add('shield', 26, 30, (c) => { c.strokeStyle = OUTLINE; c.lineWidth = 2; c.translate(0, 15); icons.shield(c, 13, 13, '#7fd0ff'); });
@@ -446,7 +532,7 @@ PD.TEX_SCALE = 1 / PD.RES;
 
     Object.keys(cfg.units).forEach((k) => {
       const d = cfg.units[k];
-      const art = scene.textures.exists('art_' + k) ? scene.textures.get('art_' + k).getSourceImage() : null;
+      const art = scene.textures.exists('art_' + k) ? cropArt(scene.textures.get('art_' + k).getSourceImage(), d.artBox) : null;
       add('unit_' + k, d.size.w, d.size.h, (c) => (
         art ? drawArt(c, d.size.w, d.size.h, art) : drawUnit(c, d.size.w, d.size.h, d)
       ));

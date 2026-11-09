@@ -46,7 +46,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     this.buildGridHelpers();
     this.buildHud();
     this.buildCards();
-    this.buildSkillMenu();
+    this.buildSkillBar();
     this.introDone = new Set();
     this.introKind = '';
     this.skillOrbFloat = false;
@@ -65,6 +65,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     });
     this.checkOrientation();
     this.refreshPrepHint();
+    this.queueFriendTips();
   }
 
   // ===== 座標換算 =====
@@ -174,71 +175,139 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     this.cancelText = PD.txt(this, R.x + R.w / 2, R.y + R.h - 26, PD.text.cancel, 22).setDepth(401);
   }
 
-  // ===== 技能圓鈕 =====
-  buildSkillMenu() {
-    const c = this.add.container(0, 0).setDepth(430).setVisible(false);
-    const bg = PD.img(this, 0, 0, 'skillBtn');
-    const icon = PD.img(this, 0, 0, 'skillIcon_trainer');
-    const ring = this.add.graphics();
-    c.add([bg, icon, ring]);
-    const size = this.L.skillBtn.size;
-    this.skillMenu = { c, bg, icon, ring, unitId: 0, kind: '', openedAt: 0, rect: { x: 0, y: 0, w: size, h: size } };
+  // ===== 常駐技能圖示列 =====
+  // 每種角色一顆，順序同卡片列；本關還沒解鎖的不畫，位置固定不跳動
+  buildSkillBar() {
+    const B = this.L.skillBar;
+    this.skillSweep = this.add.graphics().setDepth(402);
+    this.skillSlots = this.cfg.cardOrder.filter((k) => this.cfg.skills[k]).map((kind, i) => {
+      const y = B.firstY + i * B.gap;
+      const enabled = this.sim.isUnlocked(kind);
+      const glow = this.add.image(B.x, y, 'atlas', 'glow').setDepth(399).setBlendMode(Phaser.BlendModes.ADD)
+        .setTint(parseInt(this.cfg.skills[kind].bar[1].slice(1), 16)).setScale(PD.TEX_SCALE * (B.size * 1.5) / 96).setVisible(false);
+      const ring = this.add.image(B.x, y, 'atlas', 'ring').setDepth(404).setBlendMode(Phaser.BlendModes.ADD).setVisible(false);
+      const base = PD.img(this, B.x, y, 'skillLocked').setDepth(400).setVisible(enabled);
+      const art = PD.img(this, B.x, y, 'skillArt_' + kind).setDepth(401).setVisible(false);
+      const lock = PD.img(this, B.x, y, 'lock').setDepth(401).setScale(PD.TEX_SCALE * 0.6).setVisible(enabled);
+      const secs = PD.txt(this, B.x, y + 19, '', 18, '#ffffff', 4).setDepth(403).setVisible(false);
+      const rect = { x: B.x - B.hit / 2, y: y - B.hit / 2, w: B.hit, h: B.hit };
+      return { kind, x: B.x, y, enabled, glow, ring, base, art, lock, secs, rect, state: '', shown: -1, readyAt: 0, popT: 0, pressT: 0, ringT: 0 };
+    });
   }
 
-  skillBtnCenter(u) {
-    const def = this.cfg.units[u.kind];
-    const B = this.L.skillBtn;
-    const y = this.footY(u.lane) - def.size.h - B.gapAboveHead - B.size / 2;
-    return { x: this.ruleToX(u.col), y: Math.max(B.minCenterY, y) };
-  }
+  updateSkillBar(dt) {
+    const g = this.skillSweep;
+    g.clear();
+    const reduced = this.fx.reduced;
+    const battle = this.sim.state.phase === 'battle';
+    for (let i = 0; i < this.skillSlots.length; i++) {
+      const s = this.skillSlots[i];
+      if (!s.enabled) continue;
+      const onField = this.sim.countUnits(s.kind) > 0;
+      const left = onField ? this.sim.skillLeft(s.kind) : 0;
+      const state = !onField ? 'locked' : (left <= 0 && battle ? 'ready' : 'cool');
+      if (state !== s.state) this.setSkillState(s, state, reduced);
 
-  openSkillMenu(u) {
-    const M = this.skillMenu;
-    const p = this.skillBtnCenter(u);
-    M.unitId = u.id;
-    M.kind = u.kind;
-    M.openedAt = this.clock;
-    M.rect.x = p.x - M.rect.w / 2;
-    M.rect.y = p.y - M.rect.h / 2;
-    M.c.setPosition(p.x, p.y).setVisible(true);
-    M.icon.setFrame('skillIcon_' + u.kind);
-    this.showHint(PD.text.skillTap(PD.names['skill_' + u.kind]));
-    this.updateSkillMenu();
-  }
+      s.popT = Math.max(0, s.popT - dt);
+      s.pressT = Math.max(0, s.pressT - dt);
+      let scale = 1;
+      if (!reduced && s.popT > 0) scale = 1 + 0.15 * Math.sin(Math.PI * (1 - s.popT / 0.3));
+      if (!reduced && s.pressT > 0) scale = 1 - 0.1 * Math.sin(Math.PI * (1 - s.pressT / 0.18));
+      s.base.setScale(PD.TEX_SCALE * scale);
 
-  closeSkillMenu() {
-    this.skillMenu.unitId = 0;
-    this.skillMenu.c.setVisible(false);
-  }
+      if (s.ringT > 0) {
+        s.ringT = Math.max(0, s.ringT - dt);
+        const p = 1 - s.ringT / 0.4;
+        s.ring.setVisible(s.ringT > 0).setAlpha(0.8 * (1 - p)).setScale(PD.TEX_SCALE * (this.L.skillBar.size / 2 / 44) * (1 + 0.4 * p));
+      }
 
-  updateSkillMenu() {
-    const M = this.skillMenu;
-    if (!M.unitId) return;
-    const u = this.sim.findUnit(M.unitId);
-    if (!u || this.clock - M.openedAt >= this.L.skillBtn.autoCloseSeconds) { this.closeSkillMenu(); return; }
-    const left = this.sim.skillLeft(u);
-    const R = this.L.skillBtn.size / 2 - 5;
-    M.bg.setTint(left > 0 ? 0xb9c0c9 : 0xffd84a);
-    M.icon.setAlpha(left > 0 ? 0.55 : 1);
-    M.ring.clear();
-    if (left > 0) {
-      M.ring.lineStyle(9, 0x4a5462, 0.95);
-      M.ring.beginPath();
-      M.ring.arc(0, 0, R, -Math.PI / 2, -Math.PI / 2 + left * Math.PI * 2, false);
-      M.ring.strokePath();
+      if (state === 'ready') {
+        s.glow.setVisible(!reduced);
+        s.glow.setAlpha(0.75 + 0.25 * Math.sin(this.clock * Math.PI * 2 / 1.2)); // 每 1.2 秒呼吸一次（0.5～1），用真實時間
+        const t = (this.clock - s.readyAt) % 3;
+        const bounce = !reduced && t < 0.25 ? 1 + 0.08 * Math.sin(Math.PI * t / 0.25) : 1;
+        s.art.setScale(PD.TEX_SCALE * scale * bounce);
+      } else if (state === 'cool') {
+        s.art.setScale(PD.TEX_SCALE * scale);
+        const end = -Math.PI / 2 + (1 - left) * Math.PI * 2; // 從 12 點鐘順時針長滿＝已恢復的部分
+        const R = this.L.skillBar.size / 2;
+        g.fillStyle(0xffffff, 0.35);
+        g.slice(s.x, s.y, (R - 6) * scale, -Math.PI / 2, end, false);
+        g.fillPath();
+        g.lineStyle(3, 0xffffff, 1);
+        g.beginPath();
+        g.arc(s.x, s.y, (R - 4) * scale, -Math.PI / 2, end, false);
+        g.strokePath();
+        if (this.sim.mode.showSkillSeconds) {
+          const n = Math.ceil((this.sim.skillReadyAt(s.kind) - this.sim.state.tick) / this.sim.tps);
+          if (n !== s.shown) { s.shown = n; s.secs.setText(String(n)); } // 只有數字變了才重畫文字
+        }
+      }
     }
   }
 
-  tapSkillButton() {
-    const u = this.sim.findUnit(this.skillMenu.unitId);
-    if (!u) { this.closeSkillMenu(); return; }
-    const problem = this.sim.skillProblem(u);
-    if (problem) { this.showHint(PD.text.skillWait); PD.Sound.play('tap'); this.skillMenu.openedAt = this.clock; return; }
-    PD.Sound.play('tap');
-    this.sim.command({ type: 'skill', id: u.id });
-    this.closeSkillMenu();
-    this.hideRange();
-    this.showHint('');
+  setSkillState(s, state, reduced) {
+    const was = s.state;
+    s.state = state;
+    s.glow.setVisible(false);
+    s.lock.setVisible(state === 'locked');
+    s.art.setVisible(state !== 'locked').setTint(state === 'cool' ? 0xbfc6cf : 0xffffff);
+    s.secs.setVisible(state === 'cool' && this.sim.mode.showSkillSeconds);
+    s.shown = -1;
+    s.base.setFrame(state === 'locked' ? 'skillLocked' : (state === 'cool' ? 'skillDim_' : 'skillBase_') + s.kind);
+    if (state !== 'ready') return;
+    s.readyAt = this.clock;
+    if (was === 'cool' && !reduced) { // 剛冷卻完成：彈一下、光環、星星
+      s.popT = 0.3;
+      s.ringT = 0.4;
+      s.ring.setVisible(true);
+      this.fx.burst('star', s.x, s.y, 0xfff3b0, 6, 130, 0.4, 0.5, 0.1);
+    }
+  }
+
+  tapSkillBar(x, y) {
+    for (let i = 0; i < this.skillSlots.length; i++) {
+      const s = this.skillSlots[i];
+      if (!s.enabled || !PD.hitRect(s.rect, x, y)) continue;
+      PD.Sound.play('tap');
+      if (!this.sim.countUnits(s.kind)) { this.showHint(PD.text.skillNoUnit(PD.names[s.kind])); return true; }
+      const caster = this.sim.skillCaster(s.kind);
+      if (!caster) { this.showHint(PD.text.skillWait); return true; }
+      s.pressT = 0.18;
+      this.sim.command({ type: 'skill', id: caster.id });
+      this.hideRange();
+      this.showHint('');
+      return true;
+    }
+    return false;
+  }
+
+  // 新朋友第一次解鎖：進關卡時說一次。已過關重玩、同一次開啟遊戲重試都不再跳；debug.unlockAll 沒有「新解鎖」可言
+  queueFriendTips() {
+    PD.friendTipSeen = PD.friendTipSeen || new Set();
+    const n = this.sim.level.number;
+    this.friendQueue = [];
+    this.friendKind = '';
+    if (n === 1 || this.cfg.debug.unlockAll || PD.Progress.isCleared(this.modeId, n)) return;
+    this.friendQueue = this.cfg.cardOrder.filter((k) => this.cfg.units[k].unlock === n && !PD.friendTipSeen.has(this.modeId + ':' + k));
+    if (this.friendQueue.length) this.showFriendTip();
+  }
+
+  showFriendTip() {
+    const kind = this.friendQueue[0];
+    this.friendKind = kind;
+    this.introKind = 'friend-' + kind; // 自動試玩靠 introKind 知道畫面在等人按鈕
+    this.overlay.show(PD.text.newFriendTitle(PD.names[kind]), PD.text.friendDesc[kind], [{ label: PD.text.gotIt, fn: () => {
+      PD.friendTipSeen.add(this.modeId + ':' + kind);
+      this.friendQueue.shift();
+      this.friendKind = '';
+      this.introKind = '';
+      this.introPic.setVisible(false);
+      this.overlay.hide();
+      if (this.friendQueue.length) this.showFriendTip();
+    } }]);
+    if (!this.introPic) this.introPic = PD.img(this, this.L.width / 2 - 230, 500, 'unit_' + kind).setDepth(501);
+    this.introPic.setFrame('unit_' + kind).setVisible(true);
   }
 
   // 新敵人第一次出現：暫停戰鬥介紹一次
@@ -352,7 +421,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     }
     this.syncViews(this.accum / this.cfg.rules.tickSeconds);
     this.updateHud(dt);
-    this.updateSkillMenu();
+    this.updateSkillBar(dt);
     this.skillFx.update(worldDt);
     this.fx.update(worldDt);
     this.updateQuality(delta);
@@ -434,11 +503,9 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
         break;
       case 'unitGone':
         if (v) v.gone = true;
-        if (ev.id === this.skillMenu.unitId) this.closeSkillMenu();
         if (this.recalling) this.onRecallUnitLost(ev.id);
         break;
       case 'unitRecalled':
-        if (ev.id === this.skillMenu.unitId) this.closeSkillMenu();
         if (v) {
           v.gone = true;
           this.fx.flyToCounter(v.c.x, v.c.y - v.h * 0.5, this.L.orbCounter.x, this.L.orbCounter.y);
@@ -460,15 +527,15 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
           }
         }
         break;
-      case 'won': this.exitRecall(); this.closeSkillMenu(); this.onWon(); break;
-      case 'failed': this.exitRecall(); this.closeSkillMenu(); this.onFailed(); break;
+      case 'won': this.exitRecall(); this.onWon(); break;
+      case 'failed': this.exitRecall(); this.onFailed(); break;
       case 'restored':
         this.clearAllViews();
         PD.Sound.startMusic();
         this.restoring = true;
         this.overlay.hide();
         this.exitRecall();
-        this.closeSkillMenu();
+        this.skillSlots.forEach((slot) => { slot.state = ''; slot.popT = 0; slot.pressT = 0; slot.ringT = 0; slot.ring.setVisible(false); }); // 還原後不算「剛冷卻完成」
         this.skillFx.clear();
         this.setSelected(null);
         this.accum = 0;
@@ -625,7 +692,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
   // 技能冷卻好了：腳下一圈柔光，並輕輕跳一下
   updateReady(v, u) {
     if (!this.cfg.skills[u.kind]) return;
-    const ready = this.sim.state.phase === 'battle' && u.skillAt <= this.sim.state.tick;
+    const ready = this.sim.state.phase === 'battle' && this.sim.skillReadyAt(u.kind) <= this.sim.state.tick;
     if (ready && !v.readyOn) {
       v.land = 0.2;
       if (!this.skillHinted) { this.skillHinted = true; this.showHint(PD.text.skillReady); }
@@ -1030,12 +1097,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
       return;
     }
     if (this.overlay.visible) { this.overlay.tap(x, y); return; }
-    // 技能圓鈕最優先；點其他地方就收起，這一下仍照常處理（例如點球）
-    const closedUnit = this.skillMenu.unitId;
-    if (closedUnit) {
-      if (PD.hitRect(this.skillMenu.rect, x, y)) { this.tapSkillButton(); return; }
-      this.closeSkillMenu();
-    }
+    if (this.tapSkillBar(x, y)) return;
     if (this.tapOrb(x, y)) return;
     const L = this.L;
     if (PD.hitRect(L.pauseBtn, x, y)) { PD.Sound.play('tap'); this.freeze('user'); return; }
@@ -1050,7 +1112,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     for (let i = 0; i < this.cards.length; i++) {
       if (PD.hitRect(this.cards[i].rect, x, y)) { this.tapCard(this.cards[i]); return; }
     }
-    this.tapGrid(x, y, closedUnit);
+    this.tapGrid(x, y);
   }
 
   tapOrb(x, y) {
@@ -1080,7 +1142,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     this.setSelected(card.kind);
   }
 
-  tapGrid(x, y, closedUnit) {
+  tapGrid(x, y) {
     const G = this.L.grid;
     if (x < G.x || x >= G.x + G.cols * G.cellW || y < G.y || y >= G.y + G.rows * G.cellH) return;
     const col = Math.floor((x - G.x) / G.cellW) + 1;
@@ -1092,8 +1154,6 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
       if (this.selected) { this.showHint(PD.text.occupied); return; }
       const def = this.cfg.units[occupant.kind];
       if (def.range) this.showRange(lane, col, def.range, 2);
-      // 再點同一位角色只是收起圓鈕；沒有技能可用的階段（開戰前）不打開
-      if (occupant.id !== closedUnit && this.cfg.skills[occupant.kind] && this.sim.state.phase === 'battle') this.openSkillMenu(occupant);
       return;
     }
     if (!this.selected) { this.showHint(PD.text.pickCardFirst); return; }
@@ -1141,6 +1201,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     this.overlay.hide();
     this.accum = 0;
     // 切分頁把新敵人介紹蓋掉時，回來要接著顯示
+    if (this.friendKind) { this.showFriendTip(); return; }
     if (this.introKind) { const k = this.introKind; this.introDone.delete(k); this.showEnemyIntro(k); return; }
     // 從暫停回來時，若剛好在波次提示要重新顯示
     if (this.sim.state.waitingHint) {

@@ -83,6 +83,15 @@ window.PD = window.PD || {};
     levelLocked: '先過前一關才能去',
     levelCleared: '過關了',
     newFriend: '新朋友',
+    newFriendTitle: (name) => `新朋友：${name}！`,
+    friendDesc: {
+      doubleStriker: '用藤鞭連打兩下，放在前面吧',
+      tank: `很耐打，幫大家擋住${names.enemyTeam}`,
+      slowShooter: '噴水讓敵人走得慢吞吞',
+      burnShooter: '小火苗打中後還會再扣血',
+      pierceShooter: '波紋一次打中整條路',
+    },
+    gotIt: '好耶',
     nextLevel: '下一關',
     backToMap: '回地圖',
     changeMode: '換模式',
@@ -93,9 +102,9 @@ window.PD = window.PD || {};
       jumper: '會跳過第一個擋路的朋友',
       splitter: '打倒後會變成兩隻小的',
     },
-    skillTap: (name) => `${name}：再點圓鈕`,
     skillWait: '還要等一下才能再用',
-    skillReady: '可以放招了！點朋友，再點圓鈕',
+    skillReady: '可以放招了！點左邊的圖示',
+    skillNoUnit: (name) => `場上還沒有${name}`,
   };
 
   // ===== 版面（基準畫面 1180×820）=====
@@ -122,8 +131,8 @@ window.PD = window.PD || {};
     recallBtn: { x: 896, y: 676, w: 136, h: 120 },
     recallGuardSeconds: 0.35, // 防止手抖連點：第一次點角色後，這段時間內的第二下不算
     orbHitSize: 64,
-    // 技能圓鈕：78 ÷ 1180 × 1024 ≈ 67.7 點，在小 iPad 上仍大於 64 點
-    skillBtn: { size: 78, gapAboveHead: 12, minCenterY: 124, autoCloseSeconds: 3 },
+    // 常駐技能圖示：放在村莊那一欄（x 0～120，不佔草地）。畫面直徑 72；點擊範圍 78，1024×768 下約 67.7 點
+    skillBar: { x: 60, firstY: 130, gap: 82, size: 72, hit: 78 },
     // 大地圖選關：每一關的圓鈕中心，點擊範圍是圓鈕外的正方形（200×200）
     map: {
       nodes: [{ x: 230, y: 500 }, { x: 590, y: 320 }, { x: 950, y: 500 }],
@@ -139,51 +148,63 @@ window.PD = window.PD || {};
   // ===== 我方角色（內部代號不含角色名稱）=====
   const units = {
     trainer: {
-      cost: 50, hp: 6, unlock: 1, maxCount: 2, genEvery: 10,
+      cost: 50, hp: 6, maxCount: 2, genEvery: 10,
       size: { w: 68, h: 102 }, color: 0xf2a93b, light: 0xffe2a8, icon: 'badge',
     },
     basicShooter: {
-      cost: 75, hp: 6, unlock: 1, range: 4, interval: 2, damage: 1, fx: 'lightning',
+      cost: 75, hp: 6, range: 7, interval: 2, damage: 1, fx: 'lightning',
       size: { w: 66, h: 98 }, color: 0xf5d531, light: 0xfff3b0, icon: 'bolt',
       // 本機限定的待機動畫（assets/local-art/<file>.png）；沒有檔案就用靜態圖
       idleSheet: { file: 'basicShooter-idle', frames: 6, frameMs: 140 },
     },
     doubleStriker: {
-      cost: 100, hp: 8, unlock: 2, range: 2, interval: 2, damage: 2, secondHitDelay: 0.3, cleave: true, fx: 'vine',
+      cost: 100, hp: 8, range: 2, interval: 2, damage: 2, secondHitDelay: 0.3, cleave: true, fx: 'vine',
       size: { w: 70, h: 100 }, color: 0x46b868, light: 0xc6f2c8, icon: 'leaf',
     },
     tank: {
-      cost: 125, hp: 40, unlock: 3, thorns: 1,
+      cost: 125, hp: 40, thorns: 1,
       size: { w: 82, h: 115 }, color: 0x5a7ea6, light: 0xdbe6f2, icon: 'shield',
     },
     slowShooter: {
-      cost: 125, hp: 6, unlock: 4, range: 3, interval: 2, damage: 1, fx: 'water',
+      cost: 125, hp: 6, range: 3, interval: 2, damage: 1, fx: 'water',
       slow: { factor: 0.5, seconds: 3 },
       size: { w: 68, h: 100 }, color: 0x3aa7e8, light: 0xc8ecff, icon: 'drop',
     },
     burnShooter: {
-      cost: 150, hp: 6, unlock: 5, range: 3, interval: 2, damage: 1, fx: 'fire',
+      cost: 150, hp: 6, range: 3, interval: 2, damage: 1, fx: 'fire',
       burn: { perSecond: 1, seconds: 3 },
       size: { w: 68, h: 100 }, color: 0xee6a3a, light: 0xffd6b8, icon: 'flame',
     },
     // 穿透波紋：同一條路前方所有敵人各打 1。range 10 表示從任何一欄都能打到出怪點
     pierceShooter: {
-      cost: 175, hp: 6, unlock: 6, range: 10, interval: 2, damage: 1, pierce: true, fx: 'crystal',
+      cost: 175, hp: 6, range: 10, interval: 2, damage: 1, pierce: true, fx: 'crystal',
       size: { w: 68, h: 100 }, color: 0x7fb8ea, light: 0xe2f3ff, icon: 'gem',
+      // noArt＝不載入 assets/local-art 的貼圖，用程式畫的造型（現有貼圖太接近官方角色，見 CLAUDE.md 2.5 節）
+      noArt: true,
     },
   };
+  // ===== 解鎖表：第幾關新加入哪些朋友（改這裡就好；第 4～6 關做好時不用再動）=====
+  const unlockSchedule = {
+    1: ['trainer', 'basicShooter'],
+    2: ['doubleStriker'],
+    3: ['tank'],
+    4: ['slowShooter'],
+    5: ['burnShooter'],
+    6: ['pierceShooter'],
+  };
+  Object.keys(unlockSchedule).forEach((n) => unlockSchedule[n].forEach((k) => { units[k].unlock = Number(n); }));
   const cardOrder = ['trainer', 'basicShooter', 'doubleStriker', 'tank', 'slowShooter', 'burnShooter', 'pierceShooter'];
 
   // ===== 主動技能（毛毛設計 docs/active-skills-v1.md；建議值，尚未實測）=====
-  // cd＝冷卻秒數；一起守護（5 歲）再乘 modes.together.skillCdMul
+  // cd＝冷卻秒數；一起守護（5 歲）再乘 modes.together.skillCdMul；bar＝圖示底色（中心→邊緣，docs/skill-icons-v1.md）
   const skills = {
-    trainer: { cd: 45, orbs: 2 },
-    basicShooter: { cd: 20, seconds: 5, rate: 3 },
-    burnShooter: { cd: 30, seconds: 6, cells: 3, burnSeconds: 3 },
-    slowShooter: { cd: 35, push: 1, damage: 1, slowSeconds: 4, slowFactor: 0.5 },
-    doubleStriker: { cd: 25, reach: 1.5, rootSeconds: 3, damage: 4 },
-    tank: { cd: 40, heal: 0.5, reach: 1.5, damage: 3, push: 1, stunSeconds: 2 },
-    pierceShooter: { cd: 60, damage: 3, chargeSeconds: 0.4 },
+    trainer: { cd: 45, orbs: 2, bar: ['#FFE082', '#F9A825'] },
+    basicShooter: { cd: 20, seconds: 5, rate: 3, bar: ['#FFF176', '#FBC02D'] },
+    burnShooter: { cd: 30, seconds: 6, cells: 3, burnSeconds: 3, bar: ['#FF8A50', '#E64A19'] },
+    slowShooter: { cd: 35, push: 1, damage: 1, slowSeconds: 4, slowFactor: 0.5, bar: ['#81D4FA', '#0277BD'] },
+    doubleStriker: { cd: 25, reach: 1.5, rootSeconds: 3, damage: 4, bar: ['#A5D6A7', '#2E7D32'] },
+    tank: { cd: 40, heal: 0.5, reach: 1.5, damage: 3, push: 1, stunSeconds: 2, bar: ['#BCAAA4', '#5D4037'] },
+    pierceShooter: { cd: 60, damage: 3, chargeSeconds: 0.4, bar: ['#B3E5FC', '#5C6BC0'] },
   };
 
   // ===== 敵人 =====
@@ -283,8 +304,8 @@ window.PD = window.PD || {};
   const modes = {
     // 宇鋒 2026-11-08 要求稍難（原本 0.75 倍、5 次），理由與試玩數據見 CLAUDE.md
     // skillCdMul：5 歲模式技能冷卻短 20%（active-skills-v1）；「5 歲模式」對應「一起守護」
-    together: { speedMul: 0.75, rescues: 3, autoWaveHint: true, skillCdMul: 0.8 },
-    solo: { speedMul: 1, rescues: 3, autoWaveHint: false, skillCdMul: 1 },
+    together: { speedMul: 0.75, rescues: 3, autoWaveHint: true, skillCdMul: 0.8, showSkillSeconds: false },
+    solo: { speedMul: 1, rescues: 3, autoWaveHint: false, skillCdMul: 1, showSkillSeconds: true },
   };
 
   PD.names = names;
