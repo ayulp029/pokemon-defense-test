@@ -60,10 +60,27 @@ window.PD = window.PD || {};
     c.beginPath(); c.arc(x, y, 1.4, 0, 7); c.fill();
   }
 
-  function drawCell(c, x, y, w, h, open, even, rand) {
-    const colors = open
-      ? (even ? ['#93bb76', '#7ca663'] : ['#85af6b', '#71995a'])
-      : (even ? ['#8d998c', '#79857a'] : ['#828e82', '#707c71']);
+  // 第 4 關的蘆葦、第 5 關的落果（只放在格子角落）
+  function drawReed(c, x, y) {
+    c.strokeStyle = 'rgba(236,244,236,0.8)'; c.lineWidth = 1.4;
+    c.beginPath(); c.moveTo(x, y + 6); c.lineTo(x + 1, y - 6); c.stroke();
+    c.fillStyle = 'rgba(214,190,140,0.9)';
+    c.beginPath(); c.ellipse(x + 1, y - 8, 1.8, 3.6, 0, 0, 7); c.fill();
+  }
+
+  function drawFruit(c, x, y) {
+    c.fillStyle = 'rgba(224,137,106,0.5)';
+    c.beginPath(); c.arc(x, y, 3.4, 0, 7); c.fill();
+    c.fillStyle = 'rgba(255,230,200,0.4)';
+    c.beginPath(); c.arc(x - 1, y - 1.2, 1, 0, 7); c.fill();
+  }
+
+  function drawCell(c, x, y, w, h, open, even, rand, theme) {
+    const colors = theme
+      ? (open ? (even ? theme.grassA : theme.grassB) : theme.rest)
+      : open
+        ? (even ? ['#93bb76', '#7ca663'] : ['#85af6b', '#71995a'])
+        : (even ? ['#8d998c', '#79857a'] : ['#828e82', '#707c71']);
     c.fillStyle = vGrad(c, y, y + h, colors);
     c.fillRect(x, y, w, h);
 
@@ -81,10 +98,13 @@ window.PD = window.PD || {};
     drawBlades(c, x, y, w, h, rand, 'rgba(226,242,176,0.3)', open ? 11 : 5);
 
     // 小花只放在格子角落，不搶角色的視線
-    if (open && rand() < 0.4) {
+    if (open && rand() < (theme ? theme.flowerChance : 0.4)) {
       const fx = x + (rand() < 0.5 ? 12 : w - 12);
       const fy = y + (rand() < 0.5 ? 18 : h - 14);
-      drawFlower(c, fx, fy, rand);
+      const kind = theme ? theme.flower : 'flower';
+      if (kind === 'reed') drawReed(c, fx, fy);
+      else if (kind === 'fruit') drawFruit(c, fx, fy);
+      else drawFlower(c, fx, fy, rand);
     }
 
     // 格子邊緣：上左亮、下右暗
@@ -130,7 +150,7 @@ window.PD = window.PD || {};
 
     for (let r = 0; r < G.rows; r++) {
       for (let col = 0; col < G.cols; col++) {
-        drawCell(c, G.x + col * G.cellW, G.y + r * G.cellH, G.cellW, G.cellH, isOpen(r), (r + col) % 2 === 0, rand);
+        drawCell(c, G.x + col * G.cellW, G.y + r * G.cellH, G.cellW, G.cellH, isOpen(r), (r + col) % 2 === 0, rand, level.theme);
       }
     }
 
@@ -138,11 +158,14 @@ window.PD = window.PD || {};
     L.laneY.forEach((laneY, r) => {
       if (!isOpen(r)) return;
       const foot = laneY + G.cellH / 2 - G.cellH * L.footFromBottom;
+      const T = level.theme || {};
+      const rgb = T.path || '226,202,146';
       c.fillStyle = vGrad(c, foot - 24, foot + 16, [
-        'rgba(226,202,146,0)', 'rgba(226,202,146,0.26)', 'rgba(226,202,146,0)',
+        `rgba(${rgb},0)`, `rgba(${rgb},${T.pathAlpha || 0.26})`, `rgba(${rgb},0)`,
       ]);
       c.fillRect(G.x, foot - 24, fieldW, 40);
     });
+    drawTerrain(c, cfg, level, rand);
 
     for (let r = 0; r < G.rows; r++) {
       if (!isOpen(r)) drawRestLane(c, G, G.y + r * G.cellH);
@@ -156,11 +179,12 @@ window.PD = window.PD || {};
     // 左上方來的暖光
     c.save();
     c.beginPath(); c.rect(G.x, G.y, fieldW, fieldH); c.clip();
-    softCircle(c, G.x + 220, G.y - 40, 880, '255,244,200', 0.2);
+    const T = level.theme || {};
+    softCircle(c, G.x + 220, G.y - 40, 880, T.warm || '255,244,200', T.warmAlpha || 0.2);
 
     // 靠邊框的內陰影
     const edge = 22;
-    const shade = 'rgba(20,36,22,0.3)';
+    const shade = `rgba(20,36,22,${T.edgeAlpha || 0.3})`;
     const clear = 'rgba(20,36,22,0)';
     c.fillStyle = vGrad(c, G.y, G.y + edge, [shade, clear]);
     c.fillRect(G.x, G.y, fieldW, edge);
@@ -173,6 +197,81 @@ window.PD = window.PD || {};
     right.addColorStop(0, clear); right.addColorStop(1, shade);
     c.fillStyle = right; c.fillRect(G.x + fieldW - edge, G.y, edge, fieldH);
     c.restore();
+  }
+
+  // ===== 地形（第 4～6 關）：用形狀標示，不只靠顏色 =====
+  function cellBox(L, lane, col) {
+    const G = L.grid;
+    return { x: G.x + (col - 1) * G.cellW, y: G.y + (lane - 1) * G.cellH, w: G.cellW, h: G.cellH };
+  }
+
+  const terrainPainters = {
+    // 小河：藍色水面加波紋線
+    water(c, b, rand) {
+      c.fillStyle = vGrad(c, b.y, b.y + b.h, ['#6cc0e0', '#3f8fbf']);
+      c.fillRect(b.x + 4, b.y, b.w - 8, b.h);
+      c.fillStyle = 'rgba(40,90,70,0.5)';
+      c.fillRect(b.x, b.y, 5, b.h); c.fillRect(b.x + b.w - 5, b.y, 5, b.h);
+      c.strokeStyle = 'rgba(232,248,255,0.55)'; c.lineWidth = 2; c.lineCap = 'round';
+      for (let i = 0; i < 4; i++) {
+        const yy = b.y + 22 + i * 32 + rand() * 6;
+        const xx = b.x + 18 + (i % 2) * 22;
+        c.beginPath(); c.moveTo(xx, yy);
+        c.quadraticCurveTo(xx + 10, yy - 6, xx + 20, yy); c.quadraticCurveTo(xx + 30, yy + 6, xx + 40, yy);
+        c.stroke();
+      }
+    },
+    // 燈籠格：暖光圈加一盞小燈籠
+    lantern(c, b) {
+      softCircle(c, b.x + b.w / 2, b.y + b.h / 2, 70, '255,214,120', 0.32);
+      c.strokeStyle = 'rgba(255,224,150,0.65)'; c.lineWidth = 2.5;
+      c.setLineDash([8, 6]); rr(c, b.x + 5, b.y + 5, b.w - 10, b.h - 10, 12); c.stroke(); c.setLineDash([]);
+      const px = b.x + b.w - 16;
+      const py = b.y + 14;
+      c.fillStyle = '#5a4030'; c.fillRect(px - 1.5, py, 3, 26);
+      softCircle(c, px, py + 30, 18, '255,220,130', 0.6);
+      c.beginPath(); c.ellipse(px, py + 30, 8, 10, 0, 0, 7);
+      c.fillStyle = '#ffd27a'; c.fill(); c.lineWidth = 2; c.strokeStyle = OUTLINE; c.stroke();
+      c.fillStyle = '#e8705f'; c.fillRect(px - 5, py + 19, 10, 3); c.fillRect(px - 5, py + 39, 10, 3);
+    },
+    // 搗蛋團營地：條紋布加小三角旗
+    camp(c, b) {
+      c.save();
+      c.beginPath(); c.rect(b.x, b.y, b.w, b.h); c.clip();
+      c.fillStyle = 'rgba(142,90,160,0.42)'; c.fillRect(b.x, b.y, b.w, b.h);
+      c.fillStyle = 'rgba(255,224,130,0.22)';
+      for (let k = -2; k < 6; k++) {
+        poly(c, [[b.x + k * 30, b.y + b.h], [b.x + k * 30 + 14, b.y + b.h], [b.x + k * 30 + 14 + 60, b.y], [b.x + k * 30 + 60, b.y]]);
+        c.fill();
+      }
+      c.restore();
+      c.strokeStyle = 'rgba(42,24,56,0.7)'; c.lineWidth = 2;
+      c.beginPath(); c.moveTo(b.x + 10, b.y + 18); c.lineTo(b.x + b.w - 10, b.y + 18); c.stroke();
+      [0, 1, 2, 3].forEach((i) => {
+        poly(c, [[b.x + 14 + i * 20, b.y + 18], [b.x + 24 + i * 20, b.y + 18], [b.x + 19 + i * 20, b.y + 30]]);
+        c.fillStyle = i % 2 ? '#ffe082' : '#ff8e6e'; c.fill();
+      });
+    },
+    // 鼓墊：地上的圓鼓面加箭頭
+    drumPad(c, b) {
+      const cx = b.x + b.w / 2;
+      const cy = b.y + b.h * 0.62;
+      c.beginPath(); c.ellipse(cx, cy, 36, 16, 0, 0, 7);
+      c.fillStyle = 'rgba(255,142,110,0.6)'; c.fill();
+      c.lineWidth = 3; c.strokeStyle = 'rgba(122,40,60,0.75)'; c.stroke();
+      c.beginPath(); c.ellipse(cx, cy, 22, 9, 0, 0, 7);
+      c.fillStyle = 'rgba(255,240,210,0.7)'; c.fill();
+      c.strokeStyle = 'rgba(255,255,255,0.75)'; c.lineWidth = 3; c.lineCap = 'round'; c.lineJoin = 'round';
+      [0, 14].forEach((d) => {
+        c.beginPath(); c.moveTo(cx + 6 - d, cy - 36); c.lineTo(cx - 4 - d, cy - 28); c.lineTo(cx + 6 - d, cy - 20); c.stroke();
+      });
+    },
+  };
+
+  function drawTerrain(c, cfg, level, rand) {
+    (level.terrain || []).forEach((t) => t.lanes.forEach((lane) => t.cols.forEach((col) => {
+      terrainPainters[t.type](c, cellBox(cfg.layout, lane, col), rand);
+    })));
   }
 
   // ===== 村莊 =====
@@ -237,10 +336,10 @@ window.PD = window.PD || {};
     c.beginPath(); c.arc(x - 3, y - 7, 4, 0, 7); c.fill();
   }
 
-  function drawVillage(c, L, rand) {
+  function drawVillage(c, L, rand, theme) {
     const G = L.grid;
     const h = G.rows * G.cellH;
-    c.fillStyle = vGrad(c, G.y, G.y + h, ['#d6c698', '#ad9869']);
+    c.fillStyle = vGrad(c, G.y, G.y + h, (theme && theme.village) || ['#d6c698', '#ad9869']);
     c.fillRect(0, G.y, G.x, h);
 
     for (let i = 0; i < 70; i++) {
@@ -255,6 +354,14 @@ window.PD = window.PD || {};
       const by = y + 56;
       drawHouse(c, 60, by, roofs[i][0], roofs[i][1]);
       drawBush(c, 14, by + 2);
+      if (theme && theme.decor === 'lantern') {
+        // 屋旁的小燈籠（不在草地上，不擋格子）
+        c.strokeStyle = '#3a2a1a'; c.lineWidth = 1.5;
+        c.beginPath(); c.moveTo(104, by - 70); c.lineTo(104, by - 58); c.stroke();
+        softCircle(c, 104, by - 50, 20, '255,210,120', 0.55);
+        c.beginPath(); c.ellipse(104, by - 50, 7, 9, 0, 0, 7);
+        c.fillStyle = '#ffd27a'; c.fill(); c.lineWidth = 2; c.strokeStyle = OUTLINE; c.stroke();
+      }
     });
   }
 
@@ -273,14 +380,21 @@ window.PD = window.PD || {};
     const w = L.width - sx;
     const h = G.rows * G.cellH;
 
+    const T = level.theme || {};
     const g = c.createLinearGradient(sx, 0, L.width, 0);
-    g.addColorStop(0, '#5e5680'); g.addColorStop(1, '#3a3556');
+    g.addColorStop(0, T.spawn ? T.spawn[0] : '#5e5680'); g.addColorStop(1, T.spawn ? T.spawn[1] : '#3a3556');
     c.fillStyle = g;
     c.fillRect(sx, G.y, w, h);
 
     for (let i = 0; i < 46; i++) {
       c.fillStyle = `rgba(255,255,255,${0.1 + rand() * 0.28})`;
       c.beginPath(); c.arc(sx + rand() * w, G.y + rand() * h, 0.6 + rand() * 1.1, 0, 7); c.fill();
+    }
+    if (T.spawnMist) {
+      c.fillStyle = T.spawnMist;
+      for (let i = 0; i < 14; i++) {
+        c.beginPath(); c.ellipse(sx + rand() * w, G.y + rand() * h, 12 + rand() * 16, 6 + rand() * 8, 0, 0, 7); c.fill();
+      }
     }
 
     L.laneY.forEach((y, r) => {
@@ -308,7 +422,22 @@ window.PD = window.PD || {};
         c.fillStyle = 'rgba(16,14,32,0.32)';
         c.fillRect(sx, top - 1, w, 2);
       }
-      drawPennant(c, L.width - 12, top + 40, r % 2 ? '#ffd84a' : '#ff8fb0');
+      const pens = T.pennants || ['#ff8fb0', '#ffd84a'];
+      drawPennant(c, L.width - 12, top + 40, r % 2 ? pens[1] : pens[0]);
+      const foot = y + G.cellH / 2 - G.cellH * L.footFromBottom;
+      if (T.decor === 'ripple') {
+        // 出怪區的水面波紋
+        c.strokeStyle = 'rgba(168,216,255,0.25)'; c.lineWidth = 2;
+        [0, 1, 2].forEach((k) => { c.beginPath(); c.arc(sx + 30 + k * 26, foot + 14, 10 + k * 3, Math.PI, 0); c.stroke(); });
+      } else if (T.decor === 'tent' && r % 2 === 0) {
+        // 低矮的三角帳篷（高度不超過旗子）
+        const tx = sx + 56;
+        const ty = top + G.cellH - 14;
+        poly(c, [[tx - 30, ty], [tx, ty - 46], [tx + 30, ty]]);
+        c.fillStyle = '#8e5aa0'; c.fill(); c.lineWidth = 2.5; c.strokeStyle = '#2a1838'; c.stroke();
+        poly(c, [[tx - 5, ty], [tx, ty - 30], [tx + 5, ty]]);
+        c.fillStyle = '#f4d8ff'; c.fill();
+      }
     });
   }
 
@@ -333,12 +462,13 @@ window.PD = window.PD || {};
     c.lineWidth = 1.5; c.strokeStyle = 'rgba(255,255,255,0.16)'; c.stroke();
   }
 
-  function drawChrome(c, L, rand) {
+  function drawChrome(c, L, rand, theme) {
+    const T = theme || {};
     const G = L.grid;
     const fieldBottom = G.y + G.rows * G.cellH;
     const sx = G.x + G.cols * G.cellW;
 
-    c.fillStyle = vGrad(c, 0, L.topBar.h, ['#42634f', '#2a4336']);
+    c.fillStyle = vGrad(c, 0, L.topBar.h, T.chromeTop || ['#42634f', '#2a4336']);
     c.fillRect(0, 0, L.width, L.topBar.h);
     c.fillStyle = 'rgba(255,255,255,0.12)';
     c.fillRect(0, 0, L.width, 1.5);
@@ -346,7 +476,7 @@ window.PD = window.PD || {};
     inset(c, 6, 10, 172, 60, 16);        // 球數
     inset(c, L.hintPlate.x, L.hintPlate.y, L.hintPlate.w, L.hintPlate.h, 16); // 提示句
 
-    c.fillStyle = vGrad(c, fieldBottom, L.height, ['#39543f', '#1f3228']);
+    c.fillStyle = vGrad(c, fieldBottom, L.height, T.chromeBot || ['#39543f', '#1f3228']);
     c.fillRect(0, fieldBottom, L.width, L.height - fieldBottom);
 
     // 卡片與按鈕下方的落影
@@ -364,17 +494,30 @@ window.PD = window.PD || {};
   }
 
   // 場地背景（靜態，只畫一次）
-  PD.buildBackground = function (scene, cfg, level) {
+  PD.buildBackground = function (scene, cfg, level, key) {
     const L = cfg.layout;
     const { canvas, c } = newCanvas(L.width, L.height);
     const rand = makeRand(20261108);
     c.fillStyle = '#26382c';
     c.fillRect(0, 0, L.width, L.height);
-    drawVillage(c, L, rand);
+    drawVillage(c, L, rand, level.theme);
     drawSpawn(c, cfg, level, rand);
     drawField(c, cfg, level, rand);
-    drawChrome(c, L, rand);
-    scene.textures.addCanvas('bg', canvas);
+    drawChrome(c, L, rand, level.theme);
+    scene.textures.addCanvas(key || 'bg', canvas);
+  };
+
+  // 戰鬥用的背景：沒有主題的關卡（第 1～3 關）共用開場畫好的 'bg'；
+  // 有主題的關卡另畫一張，只留目前這一關的，換關時先刪掉上一張，iPad 記憶體不會越用越多
+  PD.levelBackground = function (scene, cfg, level) {
+    if (!level.theme) return 'bg';
+    const key = 'bg_level';
+    if (PD.bgLevelNumber !== level.number) {
+      if (scene.textures.exists(key)) scene.textures.remove(key);
+      PD.buildBackground(scene, cfg, level, key);
+      PD.bgLevelNumber = level.number;
+    }
+    return key;
   };
 
   // 暫停、勝利、失敗共用的大面板；太大放不進合併大圖，自己一張

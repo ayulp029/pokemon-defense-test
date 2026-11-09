@@ -244,7 +244,7 @@ window.PD = window.PD || {};
     // accessory＝程式畫的配件（textures.js），bodyBox＝本體在圖框裡的位置（留空間給配件）
     // flying：不被任何角色擋住，近戰打不到；throwAt：邊走邊丟球打同路前方的遠攻角色；cloak：顯形／隱身輪流（秒）
     flyer: {
-      hp: 5, secPerCell: 3.4, size: { w: 92, h: 82 }, bodyBox: { x: 18, y: 16, w: 56, h: 66 }, color: 0x7fa8ff, light: 0xdce8ff, shape: 'swift',
+      hp: 4, secPerCell: 3.4, size: { w: 96, h: 84 }, bodyBox: { x: 6, y: 20, w: 84, h: 64 }, color: 0x7fa8ff, light: 0xdce8ff, shape: 'swift',
       artFrom: 'burnShooter', recolor: 0x6f9bff, outline: 0x1f3f8a, accessory: 'wings', flying: true, hover: 34,
     },
     lobber: {
@@ -259,12 +259,12 @@ window.PD = window.PD || {};
     boss: {
       hp: 80, secPerCell: 9, size: { w: 112, h: 132 }, bodyBox: { x: 12, y: 18, w: 90, h: 114 }, color: 0xd9892b, light: 0xffe2b0, shape: 'plated',
       artFrom: 'tank', recolor: 0xdc8a22, outline: 0x6a3a06, accessory: 'captain', boss: true, entryPause: 0.6,
-      contactDamage: 4, homeCost: 2, orbDrop: 3, summon: { kind: 'scout', count: 1, every: 9, maxAlive: 6 }, aura: 0xffb347,
+      contactDamage: 4, homeCost: 2, orbDrop: 3, summon: { kind: 'scout', count: 1, every: 9, maxAlive: 4 }, aura: 0xffb347,
     },
     finalBoss: {
       hp: 260, secPerCell: 11, size: { w: 140, h: 164 }, bodyBox: { x: 14, y: 30, w: 116, h: 134 }, color: 0xb13fb0, light: 0xf8d2f4, shape: 'plated',
       artFrom: 'tank', recolor: 0xb83fc0, outline: 0x4a0f58, accessory: 'king', boss: true, entryPause: 0.6,
-      contactDamage: 5, homeCost: 4, orbDrop: 3, summon: { kind: 'tough', count: 2, every: 11, maxAlive: 8 }, rally: { every: 16, seconds: 4, factor: 1.4 }, aura: 0xd070ff,
+      contactDamage: 5, homeCost: 4, orbDrop: 3, summon: { kind: 'tough', count: 1, every: 11, maxAlive: 4 }, rally: { every: 18, seconds: 3, factor: 1.3 }, aura: 0xd070ff,
     },
   };
 
@@ -275,7 +275,7 @@ window.PD = window.PD || {};
     water: { noPlace: true, speedMul: 0.7 },
     lantern: { fireRate: 0.75, reveal: true },
     camp: { noPlace: true },
-    drumPad: { speedMul: 1.35 },
+    drumPad: { speedMul: 1.25 },
   };
 
   // ===== 關卡 =====
@@ -384,9 +384,9 @@ window.PD = window.PD || {};
         { at: 16, gap: 5, kinds: ['scout', 'tough', 'scout', 'scout'] },
         { at: 48, gap: 4.5, kinds: ['flyer', 'scout', 'flyer', 'tough', 'scout', 'flyer'] },
         { at: 84, gap: 3.5, kinds: ['lobber', 'tough', 'bruiser', 'flyer', 'lobber', 'healer', 'tough', 'flyer'] },
-        { at: 120, gap: 2.6, kinds: loop(['tough', 'flyer', 'lobber', 'jumper'], 3) },
+        { at: 120, gap: 2.6, kinds: loop(['bruiser', 'flyer', 'lobber', 'tough'], 3) },
         { at: 158, gap: 3, kinds: loop(['tough', 'flyer', 'healer'], 3), boss: { kind: 'boss', lane: 3 } }, // 隊長波
-        { at: 206, gap: 0.55, kinds: loop(['tough', 'flyer', 'bruiser', 'lobber'], 8) }, // 終局波
+        { at: 206, gap: 0.6, kinds: loop(['tough', 'bruiser', 'flyer', 'bruiser', 'lobber'], 6) }, // 終局波
       ]),
     },
     {
@@ -431,15 +431,15 @@ window.PD = window.PD || {};
         spawn: ['#6B3F7A', '#3E2450'], spawnMist: 'rgba(255,200,230,0.12)', pennants: ['#FF8E6E', '#FFE082'],
         warm: '255,244,200', warmAlpha: 0.2, flower: 'flower', flowerChance: 0.3, decor: 'tent',
       },
-      tune: { skyOrbEvery: 12, genEvery: 12, killOrbEvery: 2, enemies: LATE_ENEMIES },
+      tune: { skyOrbEvery: 11, genEvery: 11, killOrbEvery: 2, enemies: LATE_ENEMIES },
       script: makeScript([
         { at: 16, gap: 4.5, kinds: ['tough', 'flyer', 'scout', 'phantom', 'tough'] },
-        { at: 46, gap: 3.6, kinds: ['armored', 'lobber', 'phantom', 'flyer', 'splitter', 'tough', 'jumper'] },
-        { at: 80, gap: 3, kinds: loop(['bruiser', 'phantom', 'flyer', 'lobber'], 3) },
-        { at: 120, gap: 3, kinds: loop(['tough', 'flyer', 'healer'], 3), boss: { kind: 'boss', lane: 3 } }, // 隊長波
-        { at: 166, gap: 2, kinds: loop(['splitter', 'phantom', 'flyer', 'lobber', 'jumper'], 3) },
+        { at: 46, gap: 4.2, kinds: ['armored', 'lobber', 'tough', 'flyer', 'splitter', 'phantom'] },
+        { at: 84, gap: 4, kinds: ['bruiser', 'tough', 'flyer', 'phantom', 'lobber', 'tough', 'flyer', 'bruiser', 'phantom'] },
+        { at: 124, gap: 3.4, kinds: ['tough', 'flyer', 'healer', 'tough', 'flyer', 'tough', 'healer'], boss: { kind: 'boss', lane: 3 } }, // 隊長波
+        { at: 168, gap: 2.4, kinds: loop(['splitter', 'phantom', 'flyer', 'lobber'], 3) },
         { at: 202, gap: 1, kinds: loop(['armored', 'flyer', 'phantom', 'lobber'], 5) },
-        { at: 240, gap: 2.4, kinds: loop(['tough', 'phantom', 'flyer', 'healer'], 5), boss: { kind: 'finalBoss', lane: 2 } }, // 大王波
+        { at: 240, gap: 2.6, kinds: loop(['tough', 'phantom', 'flyer', 'healer'], 4), boss: { kind: 'finalBoss', lane: 2 } }, // 大王波
       ]),
     },
   ];

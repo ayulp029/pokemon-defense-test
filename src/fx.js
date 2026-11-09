@@ -114,15 +114,15 @@ PD.Fx = class Fx {
     const x1 = view.c.x;
     const y1 = view.c.y - view.h * 0.5;
     const isVine = fx === 'vine';
-    const dur = this.cfg.fx.projectileSeconds * (isVine ? 1.3 : 1);
+    const dur = this.cfg.fx.projectileSeconds * (isVine ? 1.3 : fx === 'lob' ? 2.6 : 1);
     Object.assign(shot, { on: true, fx, t: 0, dur, x0, y0, x1, y1, view, viewId: view.id, landed: false });
     const frame = fx === 'lightning' ? 'bolt' : fx === 'vine' ? 'vine'
-      : fx === 'water' ? 'dropP' : fx === 'crystal' ? 'hexP' : 'glow';
+      : fx === 'water' ? 'dropP' : fx === 'crystal' ? 'hexP' : fx === 'lob' ? 'orb' : 'glow';
     const color = PD.Fx.COLORS[fx];
     shot.img.setFrame(frame).setPosition(x0, y0).setTint(color).setVisible(true).setAlpha(1);
     shot.img.setRotation(Math.atan2(y1 - y0, x1 - x0));
     shot.img.setOrigin(isVine ? 0 : 0.5, 0.5);
-    shot.img.setScale((fx === 'fire' ? 0.6 : big ? 2 : 1) * PD.TEX_SCALE);
+    shot.img.setScale((fx === 'fire' ? 0.6 : fx === 'lob' ? 0.55 : big ? 2 : 1) * PD.TEX_SCALE);
     if (fx === 'water') shot.img.setRotation(Math.atan2(y1 - y0, x1 - x0) + Math.PI / 2);
     shot.glow.setPosition(x0, y0).setTint(color).setScale((isVine ? 0.02 : big ? 1.6 : 0.9) * PD.TEX_SCALE).setAlpha(0.8).setVisible(!isVine);
   }
@@ -136,13 +136,15 @@ PD.Fx = class Fx {
     if (fx === 'water') this.burst('dropP', x, y, 0x7fd4ff, n, 170, 0.42, 0.6, 0.2, 380);
     if (fx === 'vine') this.burst('leafP', x, y, 0x7ee081, n, 130, 0.5, 0.7, 0.3, 160);
     if (fx === 'crystal') this.burst('hexP', x, y, 0xbfe6ff, n, 150, 0.4, 0.8, 0.2);
+    if (fx === 'lob') this.burst('star', x, y, 0xffe36b, Math.round(n * 0.6), 120, 0.35, 0.5, 0.1, 120);
   }
 
-  starBurst(x, y) {
+  // big：隊長變成更大的星星（美術設定 s0＝2.8）
+  starBurst(x, y, big) {
     const star = this.freeParticles.length ? 1 : 0;
     if (star) {
       this.emit('star', x, y, 0xffe36b, {
-        vx: 200, vy: -340, g: 120, life: 0.75, s0: 2.2, s1: 1.1, spin: 9,
+        vx: 200, vy: -340, g: 120, life: big ? 1.1 : 0.75, s0: big ? 2.8 : 2.2, s1: 1.1, spin: 9,
       });
     }
     this.emit('ring', x, y, 0xfff4b0, { vx: 0, vy: 0, life: 0.4, s0: 0.3, s1: 1.7, a: 0.85 });
@@ -235,8 +237,10 @@ PD.Fx = class Fx {
       const fullScale = (Math.hypot(s.x1 - s.x0, s.y1 - s.y0) / 100) * PD.TEX_SCALE;
       s.img.scaleX = Math.max(0.01, fullScale * Math.sin(k * Math.PI));
     } else {
-      s.img.setPosition(x, y);
-      s.glow.setPosition(x, y);
+      // 丟丟猴的球走拋物線
+      const arc = s.fx === 'lob' ? Math.sin(k * Math.PI) * 70 : 0;
+      s.img.setPosition(x, y - arc);
+      s.glow.setPosition(x, y - arc);
       if (s.fx === 'fire' && Math.random() < this.amount(10) / 10) {
         const o = this.ambientOpt;
         o.vx = (Math.random() - 0.5) * 40; o.vy = -40 - Math.random() * 40; o.g = 0;
@@ -262,4 +266,4 @@ PD.Fx = class Fx {
   }
 };
 
-PD.Fx.COLORS = { lightning: 0xfff176, fire: 0xff8a3c, water: 0x6cc7ff, vine: 0x7ee081, crystal: 0xbfe6ff };
+PD.Fx.COLORS = { lob: 0xffe36b, lightning: 0xfff176, fire: 0xff8a3c, water: 0x6cc7ff, vine: 0x7ee081, crystal: 0xbfe6ff };

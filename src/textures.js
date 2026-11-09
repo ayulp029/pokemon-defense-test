@@ -256,6 +256,111 @@ PD.TEX_SCALE = 1 / PD.RES;
     }
   }
 
+  // ===== 新敵人的程式配件（不產生圖檔）。back＝畫在本體後面，front＝畫在前面；面朝左 =====
+  const accessories = {
+    wings: {
+      back(c, w, h) {
+        [[w * 0.6, -0.55], [w * 0.42, 0.45]].forEach(([x, tilt], i) => {
+          c.save();
+          c.translate(x, h * 0.66);
+          c.rotate(tilt);
+          c.beginPath();
+          c.moveTo(0, 0);
+          c.quadraticCurveTo(-w * 0.06, -h * 0.62, w * 0.22 * (i ? -1 : 1), -h * 0.5);
+          c.quadraticCurveTo(w * 0.18 * (i ? -1 : 1), -h * 0.14, 0, 0);
+          c.fillStyle = i ? '#cfe2ff' : '#eef5ff';
+          c.fill();
+          c.lineWidth = 2.5; c.strokeStyle = OUTLINE; c.stroke();
+          c.strokeStyle = 'rgba(80,120,200,0.55)'; c.lineWidth = 1.5;
+          c.beginPath(); c.moveTo(0, 0); c.lineTo(w * 0.13 * (i ? -1 : 1), -h * 0.42); c.stroke();
+          c.restore();
+        });
+      },
+    },
+    hat: {
+      back(c, w, h) {
+        // 背後一顆要丟的軟軟球
+        c.beginPath(); c.arc(w * 0.82, h * 0.52, w * 0.13, 0, 7);
+        c.fillStyle = '#ffe36b'; c.fill(); c.lineWidth = 2; c.strokeStyle = OUTLINE; c.stroke();
+        c.fillStyle = 'rgba(255,255,255,0.7)';
+        c.beginPath(); c.arc(w * 0.78, h * 0.49, w * 0.04, 0, 7); c.fill();
+      },
+      front(c, w, h) {
+        // 歪歪的小帽子加絨球
+        c.save();
+        c.translate(w * 0.46, h * 0.4);
+        c.rotate(-0.25);
+        poly(c, [[-w * 0.26, 0], [w * 0.22, -h * 0.02], [w * 0.02, -h * 0.2]]);
+        c.fillStyle = '#e84a5f'; c.fill(); c.lineWidth = 2.5; c.strokeStyle = OUTLINE; c.stroke();
+        c.fillStyle = '#fff4d6';
+        rr(c, -w * 0.29, -h * 0.025, w * 0.54, h * 0.05, 4); c.fill(); c.stroke();
+        c.beginPath(); c.arc(w * 0.02, -h * 0.2, w * 0.07, 0, 7); c.fill(); c.stroke();
+        c.restore();
+      },
+    },
+    mask: {
+      back(c, w, h) {
+        // 小斗篷
+        poly(c, [[w * 0.25, h * 0.3], [w * 0.75, h * 0.3], [w * 0.95, h * 0.95], [w * 0.05, h * 0.95]]);
+        c.fillStyle = '#3b3380'; c.fill(); c.lineWidth = 2.5; c.strokeStyle = OUTLINE; c.stroke();
+      },
+      front(c, w, h) {
+        // 眼罩（兩個圓洞），像玩躲貓貓
+        const y = h * 0.2;
+        c.beginPath();
+        c.ellipse(w * 0.5, y, w * 0.34, h * 0.055, 0, 0, 7);
+        c.fillStyle = '#2a2470'; c.fill(); c.lineWidth = 2; c.strokeStyle = OUTLINE; c.stroke();
+        c.fillStyle = '#ffffff';
+        [0.37, 0.61].forEach((k) => { c.beginPath(); c.ellipse(w * k, y, w * 0.065, h * 0.03, 0, 0, 7); c.fill(); });
+        c.fillStyle = 'rgba(200,190,255,0.9)';
+        c.beginPath(); c.ellipse(w * 0.8, y - h * 0.03, w * 0.08, h * 0.02, 0.4, 0, 7); c.fill();
+      },
+    },
+    captain: {
+      back(c, w, h) { cape(c, w, h, '#c0392b', '#e8705f'); },
+      front(c, w, h) { crown(c, w * 0.42, h * 0.27, w * 0.3, '#b0bec5', false); badge(c, w * 0.5, h * 0.62, w * 0.09, '#ffd84a'); },
+    },
+    king: {
+      back(c, w, h) { cape(c, w, h, '#5a1f78', '#a45ad0'); },
+      front(c, w, h) { crown(c, w * 0.42, h * 0.3, w * 0.36, '#ffd84a', true); badge(c, w * 0.5, h * 0.62, w * 0.1, '#ff8ec8'); },
+    },
+  };
+
+  function cape(c, w, h, dark, light) {
+    // 只在身體後面露出一點：上窄下寬、下擺有波浪
+    c.beginPath();
+    c.moveTo(w * 0.36, h * 0.3); c.lineTo(w * 0.64, h * 0.3);
+    c.lineTo(w * 0.86, h * 0.86);
+    c.quadraticCurveTo(w * 0.75, h * 0.8, w * 0.64, h * 0.86);
+    c.quadraticCurveTo(w * 0.5, h * 0.8, w * 0.36, h * 0.86);
+    c.quadraticCurveTo(w * 0.25, h * 0.8, w * 0.14, h * 0.86);
+    c.closePath();
+    const g = c.createLinearGradient(0, h * 0.2, 0, h);
+    g.addColorStop(0, light); g.addColorStop(1, dark);
+    c.fillStyle = g; c.fill(); c.lineWidth = 3; c.strokeStyle = OUTLINE; c.stroke();
+  }
+
+  // 皇冠（king）或頭盔上的尖角（captain）
+  function crown(c, cx, by, w, color, jewels) {
+    const pts = [[cx - w / 2, by], [cx - w / 2, by - w * 0.32], [cx - w / 4, by - w * 0.14], [cx, by - w * 0.42],
+      [cx + w / 4, by - w * 0.14], [cx + w / 2, by - w * 0.32], [cx + w / 2, by]];
+    poly(c, pts);
+    c.fillStyle = color; c.fill(); c.lineWidth = 2.5; c.strokeStyle = OUTLINE; c.stroke();
+    c.fillStyle = 'rgba(255,255,255,0.55)';
+    c.fillRect(cx - w / 2 + 3, by - w * 0.08, w - 6, w * 0.04);
+    if (!jewels) return;
+    [[-w / 4, '#ff6b9a'], [0, '#7fd4ff'], [w / 4, '#7ee081']].forEach(([dx, col]) => {
+      c.beginPath(); c.arc(cx + dx, by - w * 0.08, w * 0.05, 0, 7);
+      c.fillStyle = col; c.fill(); c.lineWidth = 1.5; c.stroke();
+    });
+  }
+
+  // 搗蛋團的歪菱形隊徽
+  function badge(c, cx, cy, r, color) {
+    poly(c, [[cx, cy - r], [cx + r * 0.85, cy - r * 0.1], [cx + r * 0.1, cy + r], [cx - r * 0.85, cy + r * 0.1]]);
+    c.fillStyle = color; c.fill(); c.lineWidth = 2; c.strokeStyle = OUTLINE; c.stroke();
+  }
+
   function drawOrb(ctx, s) {
     const c = s / 2;
     const r = s * 0.42;
@@ -565,9 +670,16 @@ PD.TEX_SCALE = 1 / PD.RES;
       const key = 'art_' + (d.artFrom || k);
       const art = scene.textures.exists(key) ? scene.textures.get(key).getSourceImage() : null;
       add('enemy_' + k, d.size.w, d.size.h, (c) => {
-        if (!art) drawEnemy(c, d.size.w, d.size.h, d);
-        else if (d.artFrom) drawRecolored(c, d.size.w, d.size.h, art, d);
-        else drawArt(c, d.size.w, d.size.h, art);
+        const acc = accessories[d.accessory];
+        const box = d.bodyBox || { x: 0, y: 0, w: d.size.w, h: d.size.h };
+        if (acc && acc.back) acc.back(c, d.size.w, d.size.h);
+        c.save();
+        c.translate(box.x, box.y);
+        if (!art) drawEnemy(c, box.w, box.h, d);
+        else if (d.artFrom) drawRecolored(c, box.w, box.h, art, d);
+        else drawArt(c, box.w, box.h, art);
+        c.restore();
+        if (acc && acc.front) acc.front(c, d.size.w, d.size.h);
       });
     });
     return list;

@@ -37,7 +37,10 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     this.restoring = false;
     this.fpsTime = 0; this.fpsFrames = 0; this.lowFor = 0;
 
-    this.add.image(0, 0, 'bg').setOrigin(0).setScale(PD.TEX_SCALE).setDepth(0);
+    this.add.image(0, 0, PD.levelBackground(this, cfg, this.sim.level)).setOrigin(0).setScale(PD.TEX_SCALE).setDepth(0);
+    // 隊長登場前，出怪區那一條路輕輕脈衝（不是整個畫面閃）
+    this.bossWarnImg = PD.img(this, 0, 0, 'white').setDepth(8).setVisible(false).setTint(0xff9ad8)
+      .setBlendMode(Phaser.BlendModes.ADD);
 
     this.views = [];
     this.viewById = new Map();
@@ -290,6 +293,8 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     this.friendKind = '';
     if (n === 1 || this.cfg.debug.unlockAll || PD.Progress.isCleared(this.modeId, n)) return;
     this.friendQueue = this.cfg.cardOrder.filter((k) => this.cfg.units[k].unlock === n && !PD.friendTipSeen.has(this.modeId + ':' + k));
+    // 有特殊地形的關卡：新朋友之後再說一次這關的場地
+    if (PD.text.levelTip[n] && !PD.friendTipSeen.has(this.modeId + ':terrain' + n)) this.friendQueue.push('terrain' + n);
     if (this.friendQueue.length) this.showFriendTip();
   }
 
@@ -297,17 +302,21 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     const kind = this.friendQueue[0];
     this.friendKind = kind;
     this.introKind = 'friend-' + kind; // 自動試玩靠 introKind 知道畫面在等人按鈕
-    this.overlay.show(PD.text.newFriendTitle(PD.names[kind]), PD.text.friendDesc[kind], [{ label: PD.text.gotIt, fn: () => {
+    const terrain = kind.indexOf('terrain') === 0;
+    const title = terrain ? PD.text.levelTipTitle : PD.text.newFriendTitle(PD.names[kind]);
+    const desc = terrain ? PD.text.levelTip[this.sim.level.number] : PD.text.friendDesc[kind];
+    this.overlay.show(title, desc, [{ label: PD.text.gotIt, fn: () => {
       PD.friendTipSeen.add(this.modeId + ':' + kind);
       this.friendQueue.shift();
       this.friendKind = '';
       this.introKind = '';
-      this.introPic.setVisible(false);
+      if (this.introPic) this.introPic.setVisible(false);
       this.overlay.hide();
       if (this.friendQueue.length) this.showFriendTip();
     } }]);
+    if (terrain) { if (this.introPic) this.introPic.setVisible(false); return; }
     if (!this.introPic) this.introPic = PD.img(this, this.L.width / 2 - 230, 500, 'unit_' + kind).setDepth(501);
-    this.introPic.setFrame('unit_' + kind).setVisible(true);
+    this.introPic.setFrame('unit_' + kind).setVisible(true).setScale(PD.TEX_SCALE);
   }
 
   // 新敵人第一次出現：暫停戰鬥介紹一次
@@ -319,7 +328,8 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
       { label: PD.text.resume, fn: () => { this.introKind = ''; this.introPic.setVisible(false); this.overlay.hide(); } },
     ]);
     if (!this.introPic) this.introPic = PD.img(this, this.L.width / 2 - 230, 500, 'enemy_' + kind).setDepth(501); // 在「繼續」鈕左邊，不壓到按鈕
-    this.introPic.setFrame('enemy_' + kind).setVisible(true);
+    const size = this.cfg.enemies[kind].size;
+    this.introPic.setFrame('enemy_' + kind).setVisible(true).setScale(PD.TEX_SCALE * Math.min(1, 130 / size.h));
   }
 
   // ===== 物件池：角色／敵人 =====
@@ -352,12 +362,13 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
       breath: 0, actRate: 1, walkRate: 1, slowed: false, burning: false, flamesOn: false, tintNow: 0, dropT: 0,
       baseFrame: frame, idleFrames: 0, idleMs: 0, idleT: 0, idleShown: -1,
       skillT: -1, skillKeys: null, readyOn: false, frenzyOn: false, slideT: 0, slideDx: 0, hopT: 0, hopDx: 0,
+      hover: 0, hpWide: 1, hpTall: 1, cloakOn: false, aura: 0, shimmerT: 0,
     });
-    v.ready.setVisible(false).setScale(PD.TEX_SCALE * (size.w / 48), PD.TEX_SCALE * 0.5);
+    v.ready.setVisible(false).setTint(0xffe9a0).setScale(PD.TEX_SCALE * (size.w / 48), PD.TEX_SCALE * 0.5);
     v.shadow.x = 0;
     v.body.setFrame(frame).clearTint().setScale(PD.TEX_SCALE).setPosition(0, 0).setRotation(0).setAlpha(1);
     v.label.setText(name).setPosition(0, -size.h * 0.5);
-    v.hpBack.setPosition(0, -size.h - 8);
+    v.hpBack.setPosition(0, -size.h - 8).setScale(PD.TEX_SCALE);
     v.hpFill.setPosition(-26, -size.h - 8).setScale(PD.TEX_SCALE, PD.TEX_SCALE);
     v.burn.setPosition(-22, -size.h - 24).setVisible(false);
     v.slow.setPosition(22, -size.h - 24).setVisible(false);
@@ -442,6 +453,30 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
         break;
       case 'comet': this.skillFx.comet(ev); break;
       case 'enemyNew': this.showEnemyIntro(ev.kind); break;
+      case 'enemyThrow': {
+        const u = this.viewById.get(ev.unitId);
+        if (v && u) {
+          this.fx.fire('lob', v.c.x - v.w * 0.3, v.c.y - v.h * 0.7, u, false);
+          PD.Anim.release(v, PD.Anim.styleOf(v.kind), false);
+        }
+        break;
+      }
+      case 'enemySummon':
+        if (v) {
+          this.fx.glowPop(v.c.x + v.w * 0.4, v.foot - 40, 0xffd0a0, 1, 0.3);
+          this.fx.burst('star', v.c.x + v.w * 0.4, v.foot - 40, 0xffd0a0, 8, 140, 0.4, 0.5, 0.1);
+          PD.Sound.play('place');
+        }
+        break;
+      case 'enemyRally':
+        if (v) {
+          this.fx.emit('ring', v.c.x, v.c.y - v.h * 0.5, 0xff9ad8, { vx: 0, vy: 0, life: 0.6, s0: 0.5, s1: 3, a: 0.8 });
+          this.fx.emit('ring', v.c.x, v.c.y - v.h * 0.5, 0xffe082, { vx: 0, vy: 0, life: 0.8, s0: 0.3, s1: 2.4, a: 0.6 });
+          PD.Sound.play('bump');
+          this.showHint(PD.text.rallyHint);
+        }
+        break;
+      case 'bossWarn': this.warnBoss(ev.lane); break;
       case 'enemyPushed':
         if (v) { v.slideT = 0.3; v.slideDx = -ev.cells * this.L.grid.cellW; }
         break;
@@ -467,6 +502,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
         if (ev.reason === 'orbs') this.showHint(PD.text.needMoreOrbs);
         if (ev.reason === 'limit') this.showHint(PD.text.trainerLimit);
         if (ev.reason === 'startersFirst') this.showHint(PD.text.startersFirst);
+        if (ev.reason === 'terrain') this.showHint(PD.text.terrainNoPlace);
         break;
       case 'battleStart':
         this.showHint(PD.text.autoCollect);
@@ -637,9 +673,14 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
       if (v.dying === 0) { v.dying = 0.13; return false; }
       v.dying -= this.frameDt;
       if (v.dying > 0) return false;
-      this.fx.starBurst(v.c.x, v.c.y - v.h * 0.5);
+      const big = !!this.cfg.enemies[v.kind].boss;
+      this.fx.starBurst(v.c.x, v.c.y - v.h * 0.5, big);
+      if (big) {
+        this.fx.starBurst(v.c.x - 40, v.c.y - v.h * 0.8, false);
+        this.fx.starBurst(v.c.x + 40, v.c.y - v.h * 0.3, false);
+      }
       PD.Sound.play('star');
-      if (v.kind === 'armored') this.fx.shake();
+      if (v.kind === 'armored' || big) this.fx.shake();
       this.releaseView(index);
       return true;
     }
@@ -729,8 +770,23 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
       v = this.acquireActor(e.id, 'enemy_' + e.kind, PD.names[e.kind], def.size, this.footY(e.lane), true);
       v.kind = e.kind;
       if (this.textures.exists('art_' + (def.artFrom || e.kind))) v.label.setText(''); // 有貼圖就不在身上蓋字
-      v.c.setDepth(25 + e.lane * 10);
+      v.c.setDepth(25 + e.lane * 10 + (def.flying ? 5 : 0)); // 飛的畫在同路其他敵人上面
+      v.hover = def.hover || 0;
+      v.aura = def.aura || 0;
+      if (def.boss) {
+        // 隊長：血條粗一點，腳下有一圈柔光
+        v.hpWide = 1.7; v.hpTall = 1.5;
+        v.hpBack.setScale(PD.TEX_SCALE * v.hpWide, PD.TEX_SCALE * v.hpTall);
+        v.hpFill.setX(-26 * v.hpWide);
+        v.ready.setTint(def.aura).setScale(PD.TEX_SCALE * (def.size.w / 40), PD.TEX_SCALE * 0.6).setVisible(true);
+        if (!this.restoring) v.land = 0.38; // 登場時輕跳一下（揮旗亮相）
+      }
+      if (v.hover) {
+        v.hpBack.y -= v.hover; v.hpFill.y -= v.hover; v.burn.y -= v.hover; v.slow.y -= v.hover;
+      }
     }
+    if (v.aura) v.ready.setAlpha(0.45 + Math.sin(this.worldClock * 3) * 0.2);
+    this.updateCloak(v, e);
     v.seen = true;
     const x = e.px + (e.x - e.px) * alpha;
     // 被推回與跳躍只是外觀上的滑動：規則座標早就在終點了
@@ -777,6 +833,37 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
       v.stepped = false;
       this.fx.dust(v.c.x + v.w * 0.25, v.foot, style.walk.dust);
     }
+  }
+
+  // 隱身：身體變半透明並慢慢閃著微光（不快速閃爍），旁邊冒小亮點；血條仍看得到
+  updateCloak(v, e) {
+    if (!e.cloaked) {
+      if (v.cloakOn) { v.cloakOn = false; v.body.setAlpha(1); this.fx.glowPop(v.c.x, v.c.y - v.h * 0.5, 0xc9c0ff, 0.8, 0.25); }
+      return;
+    }
+    if (!v.cloakOn) { v.cloakOn = true; this.fx.burst('spark', v.c.x, v.c.y - v.h * 0.5, 0xc9c0ff, 8, 90, 0.4, 0.6, 0.1); }
+    v.body.setAlpha(this.fx.reduced ? 0.35 : 0.3 + Math.sin(this.worldClock * 3.5 + v.seed) * 0.1);
+    if (this.overlay.visible) return;
+    v.shimmerT -= this.frameDt;
+    if (v.shimmerT <= 0) {
+      v.shimmerT = 0.22;
+      this.fx.ambient('spark', v.c.x + (Math.random() - 0.5) * v.w * 0.8, v.c.y - Math.random() * v.h, 0xd8d0ff, 0, -24, 0, 0.5, 0.6, 0.1, 0.9);
+    }
+  }
+
+  warnBoss(lane) {
+    const L = this.L;
+    const G = L.grid;
+    const sx = G.x + G.cols * G.cellW;
+    this.showHint(PD.text.bossComing);
+    const img = this.bossWarnImg;
+    this.tweens.killTweensOf(img);
+    img.setPosition(sx + (L.width - sx) / 2, this.laneY(lane)).setDisplaySize(L.width - sx, G.cellH).setVisible(true).setAlpha(0.05);
+    // 1.2 秒內柔和地亮暗三次（每次 0.4 秒，不算快速閃爍）；減少特效時只亮一下
+    this.tweens.add({
+      targets: img, alpha: 0.32, duration: 200, yoyo: true, repeat: this.fx.reduced ? 0 : 2, ease: 'Sine.easeInOut',
+      onComplete: () => img.setVisible(false),
+    });
   }
 
   // 燃燒的小火星、變慢的水滴（各自有間隔，不是每格畫面都出）
@@ -841,6 +928,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
       offY -= Math.sin(k * Math.PI) * 26;
       sx += k * 0.12; sy -= k * 0.08;
     }
+    if (v.hover) offY -= v.hover + Math.sin(this.worldClock * 3 + v.seed) * 4; // 飛在空中，影子留在地上
     if (v.flash > 0) {
       v.flash -= dt;
       v.body.setTintFill(0xffffff);
@@ -857,7 +945,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     v.shadow.x = offX * 0.6;
     if (v.isEnemy) {
       // 跳起來時影子變小，看起來真的離地
-      const lift = Math.max(0.7, 1 + offY / 60);
+      const lift = Math.max(0.7, 1 + (offY + v.hover) / 60);
       v.shadow.setScale(v.shadowSX * lift, PD.TEX_SCALE * 0.9 * lift);
       this.updateFlames(v, offX, offY);
     }
@@ -865,7 +953,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     const half = v.h * 0.5;
     v.label.setPosition(offX + Math.sin(rot) * half, offY - Math.cos(rot) * half).setRotation(rot);
     const ratio = Math.max(0, hp / maxHp);
-    v.hpFill.setScale(PD.TEX_SCALE * ratio, PD.TEX_SCALE)
+    v.hpFill.setScale(PD.TEX_SCALE * ratio * v.hpWide, PD.TEX_SCALE * v.hpTall)
       .setTint(ratio > 0.5 ? 0x7ee081 : ratio > 0.25 ? 0xffd84a : 0xff9a5a);
   }
 
@@ -999,7 +1087,8 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
   suggestedSpot(kind) {
     const t = this.sim.level.tutorial[kind];
     const lane = t ? t.lane : this.sim.level.openLanes[0];
-    const col = t ? t.col : 6;
+    let col = t ? t.col : 6;
+    while (col > 1 && this.sim.cellBlocked(lane, col)) col--;
     return this.sim.unitAt(lane, col) ? null : { lane, col };
   }
 
@@ -1010,7 +1099,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
       for (let c = 1; c <= G.cols; c++) {
         const g = this.cellGlows[n++];
         const unit = this.sim.unitAt(r, c);
-        const show = this.recalling ? !!unit : !!this.selected && this.sim.isLaneOpen(r) && !unit;
+        const show = this.recalling ? !!unit : !!this.selected && this.sim.isLaneOpen(r) && !unit && !this.sim.cellBlocked(r, c);
         g.setVisible(show);
         if (!show) continue;
         g.setPosition(this.ruleToX(c), this.laneY(r));

@@ -132,6 +132,38 @@ PD.Anim = (function () {
       snap: 0.05, dur: 0.32, strike: pose(-0.08, 0.1, 0.2, 10, -4),
       hurt: ENEMY_HURT,
     },
+    // 飄飄翼：在空中輕輕上下飄，不揚起塵土
+    flyer: {
+      facing: -1, idle: { speed: 3, amp: 0.04, sway: 0.02 },
+      walk: { speed: 6, hop: 6, hopPow: 0.6, stretch: 0.06, squash: 0.04, tilt: 0.06, sway: 2, twist: 0, lean: 0.05, dust: 0 },
+      windup: 0.3, charge: pose(0.06, -0.08, -0.12, -4, 0),
+      snap: 0.06, dur: 0.36, strike: pose(-0.06, 0.08, 0.18, 10, -3),
+      hurt: ENEMY_HURT,
+    },
+    // 丟丟猴：蹦蹦跳跳
+    lobber: {
+      facing: -1, idle: { speed: 2.8, amp: 0.03, sway: 0.014 },
+      walk: { speed: 8, hop: 6, hopPow: 0.8, stretch: 0.05, squash: 0.09, tilt: 0.05, sway: 0, twist: 0, lean: 0.03, dust: 0.8 },
+      windup: 0.4, charge: pose(0.06, -0.1, -0.2, -6, 0),
+      snap: 0.07, dur: 0.42, strike: pose(-0.06, 0.08, 0.22, 12, -3),
+      hurt: ENEMY_HURT,
+    },
+    // 躲躲影：輕飄飄地滑步
+    phantom: {
+      facing: -1, idle: { speed: 1.8, amp: 0.035, sway: 0.02 },
+      walk: { speed: 5, hop: 2, hopPow: 1, stretch: 0.03, squash: 0.03, tilt: 0.08, sway: 4, twist: 0.04, lean: 0.02, dust: 0.3 },
+      windup: 0.42, charge: pose(0.06, -0.1, -0.2, -7, 0),
+      snap: 0.07, dur: 0.44, strike: pose(-0.06, 0.08, 0.22, 14, -3),
+      hurt: ENEMY_HURT,
+    },
+    // 鐵鎚隊長、搗蛋大王：大步重踏
+    boss: {
+      facing: -1, idle: { speed: 1.1, amp: 0.03, sway: 0.006 },
+      walk: { speed: 2.4, hop: 2, hopPow: 2, stretch: 0, squash: 0.1, tilt: 0.06, sway: 2, twist: 0, lean: 0, dust: 2 },
+      windup: 0.7, charge: pose(0.06, -0.08, -0.16, -10, 0),
+      snap: 0.1, dur: 0.6, strike: pose(-0.04, 0.06, 0.18, 18, 0),
+      hurt: { dur: 0.25, kick: -2, jitter: 1.5, tilt: 0.03, squash: 0.06 },
+    },
     armored: {
       facing: -1, idle: { speed: 1.4, amp: 0.03, sway: 0.006 },
       walk: { speed: 3.2, hop: 1.5, hopPow: 2, stretch: 0, squash: 0.09, tilt: 0.07, sway: 2, twist: 0, lean: 0, dust: 1.5 },
@@ -162,6 +194,8 @@ PD.Anim = (function () {
   const copy = (to, from) => {
     to.sx = from.sx; to.sy = from.sy; to.r = from.r; to.x = from.x; to.y = from.y;
   };
+
+  styles.finalBoss = styles.boss;
 
   return {
     styleOf(kind) { return styles[kind] || styles.basicShooter; },
