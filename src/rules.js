@@ -28,7 +28,7 @@ PD.BattleSim = class BattleSim {
   freshState() {
     return {
       phase: 'prep', tick: 0, balls: this.tune.startBalls || this.rules.startBalls, nextId: 1,
-      nextSpawn: 0, lastSnapWave: 0, rescues: 0, placeCd: 0,
+      nextSpawn: 0, lastSnapWave: 0, rescues: 0, placeCd: 0, kills: 0,
       waitingHint: false, skySeq: 0, units: [], enemies: [], orbs: [],
     };
   }
@@ -264,7 +264,9 @@ PD.BattleSim = class BattleSim {
       if (e.hp > 0) continue;
       s.enemies.splice(i, 1);
       this.events.push({ type: 'enemyDown', id: e.id, kind: e.kind });
-      this.addOrb(e.x, e.lane, 'enemy');
+      // killOrbEvery：每擊倒幾隻才掉一顆（固定節奏、不用隨機），避免打得越多錢越多
+      s.kills++;
+      if (s.kills % (this.tune.killOrbEvery || 1) === 0) this.addOrb(e.x, e.lane, 'enemy');
     }
   }
 

@@ -115,13 +115,13 @@ window.PD = window.PD || {};
       size: { w: 68, h: 102 }, color: 0xf2a93b, light: 0xffe2a8, icon: 'badge',
     },
     basicShooter: {
-      cost: 75, hp: 6, unlock: 1, range: 3, interval: 2, damage: 1, fx: 'lightning',
+      cost: 75, hp: 6, unlock: 1, range: 4, interval: 2, damage: 1, fx: 'lightning',
       size: { w: 66, h: 98 }, color: 0xf5d531, light: 0xfff3b0, icon: 'bolt',
       // 本機限定的待機動畫（assets/local-art/<file>.png）；沒有檔案就用靜態圖
       idleSheet: { file: 'basicShooter-idle', frames: 6, frameMs: 140 },
     },
     doubleStriker: {
-      cost: 100, hp: 14, unlock: 2, range: 1, interval: 2, damage: 2, secondHitDelay: 0.3, fx: 'vine',
+      cost: 100, hp: 8, unlock: 2, range: 2, interval: 2, damage: 2, secondHitDelay: 0.3, fx: 'vine',
       size: { w: 70, h: 100 }, color: 0x46b868, light: 0xc6f2c8, icon: 'leaf',
     },
     tank: {
@@ -172,17 +172,17 @@ window.PD = window.PD || {};
       tutorial: { trainer: { lane: 1, col: 1 }, basicShooter: { lane: 1, col: 6 } },
       // 各關 tune 只影響該關，理由與試玩結果記在 CLAUDE.md「各關目標與結果」
       tune: {
-        skyOrbEvery: 12,
-        genEvery: 12,
-        enemies: { scout: { secPerCell: 6.5, hp: 8 } },
+        skyOrbEvery: 16,
+        genEvery: 16,
+        killOrbEvery: 2,
+        enemies: { scout: { secPerCell: 3.25, hp: 5 } },
       },
       script: makeScript([
-        { at: 10, gap: 4, kinds: many('scout', 4) },
-        { at: 34, gap: 4, kinds: many('scout', 4) },
-        { at: 64, gap: 3, kinds: many('scout', 6) },
-        { at: 100, gap: 3, kinds: many('scout', 6) },
-        { at: 138, gap: 2.5, kinds: many('scout', 8) },
-        { at: 176, gap: 2.5, kinds: many('scout', 8) },
+        { at: 18, gap: 6, kinds: many('scout', 4) },
+        { at: 54, gap: 5, kinds: many('scout', 5) },
+        { at: 88, gap: 3.5, kinds: many('scout', 7) },
+        { at: 124, gap: 2.5, kinds: many('scout', 10) },
+        { at: 162, gap: 0.5, kinds: many('scout', 40) }, // 終局波
       ]),
     },
     {
@@ -191,16 +191,17 @@ window.PD = window.PD || {};
       requiredToStart: ['trainer', 'basicShooter'],
       tutorial: { trainer: { lane: 1, col: 1 }, basicShooter: { lane: 1, col: 6 } },
       tune: {
-        skyOrbEvery: 12,
-        genEvery: 12,
-        enemies: { scout: { secPerCell: 6.5, hp: 8 }, tough: { secPerCell: 6.5, hp: 10 } },
+        skyOrbEvery: 14,
+        genEvery: 14,
+        killOrbEvery: 2,
+        enemies: { scout: { secPerCell: 3.25, hp: 5 }, tough: { secPerCell: 3.25, hp: 8 } },
       },
       script: makeScript([
-        { at: 10, gap: 3, kinds: many('scout', 4) },
-        { at: 40, gap: 3, kinds: ['scout', 'tough', 'scout', 'tough', 'scout', 'tough'] },
-        { at: 80, gap: 2.5, kinds: ['tough', 'scout', 'tough', 'scout', 'tough', 'scout', 'tough', 'scout', 'tough', 'tough'] },
-        { at: 120, gap: 2.5, kinds: many('tough', 9) },
-        { at: 160, gap: 2, kinds: [].concat(...Array(4).fill(['tough', 'scout', 'tough', 'tough'])) },
+        { at: 16, gap: 6, kinds: many('scout', 4) },
+        { at: 52, gap: 5, kinds: ['scout', 'tough', 'scout', 'tough', 'scout'] },
+        { at: 88, gap: 3.5, kinds: ['tough', 'scout', 'tough', 'scout', 'tough', 'scout', 'tough', 'scout'] },
+        { at: 124, gap: 2.5, kinds: many('tough', 10) },
+        { at: 162, gap: 0.5, kinds: [].concat(...Array(10).fill(['tough', 'scout', 'tough', 'tough'])) }, // 終局波
       ]),
     },
     {
@@ -209,20 +210,21 @@ window.PD = window.PD || {};
       requiredToStart: ['trainer', 'basicShooter'],
       tutorial: { trainer: { lane: 1, col: 1 }, basicShooter: { lane: 1, col: 6 } },
       tune: {
-        skyOrbEvery: 12,
-        genEvery: 12,
+        skyOrbEvery: 14,
+        genEvery: 14,
+        killOrbEvery: 2,
         enemies: {
-          scout: { secPerCell: 6.5, hp: 8 },
-          tough: { secPerCell: 6.5, hp: 12 },
-          runner: { secPerCell: 4, hp: 8 },
+          scout: { secPerCell: 3.25, hp: 5 },
+          tough: { secPerCell: 3.25, hp: 8 },
+          runner: { secPerCell: 2, hp: 5 },
         },
       },
       script: makeScript([
-        { at: 10, gap: 3, kinds: ['scout', 'scout', 'tough', 'tough'] },
-        { at: 40, gap: 3, kinds: ['runner', 'scout', 'tough', 'runner', 'scout', 'tough'] },
-        { at: 80, gap: 3, kinds: [].concat(...Array(4).fill(['tough', 'runner'])) },
-        { at: 120, gap: 2.5, kinds: [].concat(...Array(5).fill(['runner', 'tough'])) },
-        { at: 160, gap: 2, kinds: [].concat(...Array(4).fill(['tough', 'runner', 'tough', 'runner'])) },
+        { at: 16, gap: 6, kinds: ['scout', 'scout', 'tough', 'tough'] },
+        { at: 52, gap: 5, kinds: ['runner', 'scout', 'tough', 'runner', 'scout'] },
+        { at: 88, gap: 3.5, kinds: [].concat(...Array(4).fill(['tough', 'runner'])) },
+        { at: 124, gap: 2.5, kinds: [].concat(...Array(5).fill(['runner', 'tough'])) },
+        { at: 162, gap: 0.5, kinds: [].concat(...Array(8).fill(['tough', 'runner', 'tough', 'runner'])) }, // 終局波
       ]),
     },
   ];
@@ -251,7 +253,7 @@ window.PD = window.PD || {};
       placeCooldown: 0.4,
       lockWait: 0.5,
       enemyContactEvery: 2,
-      enemyContactDamage: 1,
+      enemyContactDamage: 2,
     },
     fx: {
       maxParticles: 200,

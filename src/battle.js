@@ -78,7 +78,9 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
         .setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.3).setVisible(false));
     }
     this.rangeImgs = [];
-    for (let i = 0; i < 3; i++) {
+    // 預覽格數要夠最遠的射程用，改射程時才不會少畫
+    const maxRange = Math.max(...Object.values(this.cfg.units).map((u) => u.range || 0));
+    for (let i = 0; i < maxRange; i++) {
       this.rangeImgs.push(PD.img(this, 0, 0, 'range').setDepth(6).setTint(0xffe36b)
         .setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.5).setVisible(false));
     }
