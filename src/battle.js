@@ -152,8 +152,11 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
       const edge = PD.img(this, cx, cy, 'cardEdge').setDepth(401).setTint(0xffe84a).setVisible(false);
       const plate = PD.img(this, cx, C.y + 102.5, 'cardPlate').setDepth(401).setTint(0xb0b6be).setVisible(false);
       // 價格徽章在左上角、角色圖靠右，兩者不重疊；鎖住的卡沒有徽章，圖放中間
-      const picX = unlocked ? x + C.w - 34 : cx;
-      const pic = PD.img(this, picX, C.y + 47, 'cardPic_' + kind).setDepth(401);
+      // 有卡片特寫（assets/local-art/card-<代號>.png）時填滿整個頭像窗（窗的中心就是卡片中心），徽章蓋在左上角
+      const face = this.textures.get('atlas').has('cardFace_' + kind);
+      const picX = face || !unlocked ? cx : x + C.w - 34;
+      const picY = face ? C.y + 49 : C.y + 47;
+      const pic = PD.img(this, picX, picY, (face ? 'cardFace_' : 'cardPic_') + kind).setDepth(401);
       const name = PD.txt(this, cx, C.y + 102, PD.names[kind], 20, '#2a2a2a', 0).setDepth(402);
       const badge = PD.img(this, x + 34, C.y + 25, 'costBadge').setDepth(402).setTint(0xd2571a).setScale(PD.TEX_SCALE * 0.84);
       const coin = PD.img(this, x + 15, C.y + 25, 'orb').setDepth(403).setScale(PD.TEX_SCALE * 0.36);
@@ -169,7 +172,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
         coin.setVisible(false);
         lockImg = PD.img(this, cx, C.y + 46, 'lock').setDepth(403).setTint(0xf0f4f8);
       }
-      return { kind, rect: { x, y: C.y, w: C.w, h: C.h }, def, bg, pic, name, badge, cost, coin, glow, cd, lockImg, unlocked, edge, plate, pressT: 0, canBuy: null };
+      return { kind, rect: { x, y: C.y, w: C.w, h: C.h }, def, bg, pic, picY, name, badge, cost, coin, glow, cd, lockImg, unlocked, edge, plate, pressT: 0, canBuy: null };
     });
     const B = this.L.recallBtn;
     const bx = B.x + B.w / 2;
@@ -1036,7 +1039,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
         card.dy = dy;
         card.bg.y = card.rect.y + card.rect.h / 2 + dy;
         card.edge.y = card.bg.y;
-        card.pic.y = C.y + 47 + dy;
+        card.pic.y = card.picY + dy;
         card.name.y = C.y + 102 + dy;
         card.plate.y = C.y + 102.5 + dy;
         card.badge.y = C.y + 25 + dy;

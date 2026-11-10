@@ -531,6 +531,59 @@ window.PD = window.PD || {};
     woodBar(c, 0, fieldBottom, L.width, L.cards.y - fieldBottom, false, rand);
   }
 
+  // ===== 圖檔背景（第 4～6 關的 bgArt）=====
+  // 整張 1180×820 的圖以 (ax, ay) 為中心放大 scale 倍，再移動 (dx, dy)；上下的介面列、村莊和出怪區照樣蓋在上面，
+  // 看得到的只有草地那一塊（x 120～1080、y 88～664）
+  function drawBgArt(c, L, img, A) {
+    const s = A.scale || 1;
+    const x = (A.ax || 0) * (1 - s) + (A.dx || 0);
+    const y = (A.ay || 0) * (1 - s) + (A.dy || 0);
+    c.imageSmoothingEnabled = true;
+    c.imageSmoothingQuality = 'high';
+    c.drawImage(img, x, y, L.width * s, L.height * s);
+  }
+
+  // 圖檔背景上的草地：不再畫草色格子，只畫淡淡的格線、路線小徑和地形（地形是規則的一部分，一定要看得到）
+  function drawFieldOnArt(c, cfg, level) {
+    const L = cfg.layout;
+    const G = L.grid;
+    const A = level.bgArt;
+    const fieldW = G.cols * G.cellW;
+    const fieldH = G.rows * G.cellH;
+    c.save();
+    c.beginPath(); c.rect(G.x, G.y, fieldW, fieldH); c.clip();
+    if (A.tint) { c.fillStyle = `rgba(${A.tint},${A.tintAlpha || 0.08})`; c.fillRect(G.x, G.y, fieldW, fieldH); }
+    if (A.veil) { c.fillStyle = A.veil; c.fillRect(G.x, G.y, fieldW, fieldH); }
+    // 敵人走的小徑（比程式草地更淡）
+    const T = level.theme || {};
+    const rgb = T.path || '226,202,146';
+    L.laneY.forEach((laneY) => {
+      const foot = laneY + G.cellH / 2 - G.cellH * L.footFromBottom;
+      c.fillStyle = vGrad(c, foot - 22, foot + 14, [`rgba(${rgb},0)`, `rgba(${rgb},${A.pathAlpha || 0.16})`, `rgba(${rgb},0)`]);
+      c.fillRect(G.x, foot - 22, fieldW, 36);
+    });
+    c.restore();
+    drawTerrain(c, cfg, level, makeRand(7));
+    // 格線：亮線加一條很淡的暗線，在亮處和暗處都看得到；路與路之間稍微明顯一點
+    const line = A.gridAlpha || 0.2;
+    for (let col = 1; col < G.cols; col++) {
+      const x = G.x + col * G.cellW;
+      c.fillStyle = `rgba(255,255,255,${line})`; c.fillRect(x - 0.5, G.y, 1, fieldH);
+      c.fillStyle = `rgba(16,28,20,${line * 0.6})`; c.fillRect(x + 0.5, G.y, 1, fieldH);
+    }
+    for (let r = 1; r < G.rows; r++) {
+      const y = G.y + r * G.cellH;
+      c.fillStyle = `rgba(255,255,255,${line * 1.5})`; c.fillRect(G.x, y - 0.75, fieldW, 1.5);
+      c.fillStyle = `rgba(16,28,20,${line})`; c.fillRect(G.x, y + 0.75, fieldW, 1.5);
+    }
+    // 靠邊框的淡內陰影
+    const edge = 18;
+    const shade = 'rgba(14,24,18,0.28)';
+    const clear = 'rgba(14,24,18,0)';
+    c.fillStyle = vGrad(c, G.y, G.y + edge, [shade, clear]); c.fillRect(G.x, G.y, fieldW, edge);
+    c.fillStyle = vGrad(c, G.y + fieldH - edge, G.y + fieldH, [clear, shade]); c.fillRect(G.x, G.y + fieldH - edge, fieldW, edge);
+  }
+
   // 場地背景（靜態，只畫一次）
   PD.buildBackground = function (scene, cfg, level, key) {
     const L = cfg.layout;
@@ -538,9 +591,13 @@ window.PD = window.PD || {};
     const rand = makeRand(20261108);
     c.fillStyle = '#26382c';
     c.fillRect(0, 0, L.width, L.height);
+    // 有圖檔背景（而且檔案在）就用圖，缺檔時照舊用程式畫的草地
+    const artKey = 'bgArt_' + level.number;
+    const art = level.bgArt && scene.textures.exists(artKey) ? scene.textures.get(artKey).getSourceImage() : null;
+    if (art) drawBgArt(c, L, art, level.bgArt);
     drawVillage(c, L, rand, level.theme);
     drawSpawn(c, cfg, level, rand);
-    drawField(c, cfg, level, rand);
+    if (art) drawFieldOnArt(c, cfg, level); else drawField(c, cfg, level, rand);
     drawChrome(c, L, rand, level.theme);
     scene.textures.addCanvas(key || 'bg', canvas);
   };

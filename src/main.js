@@ -17,6 +17,11 @@ PD.BootScene = class BootScene extends Phaser.Scene {
     // 敵人的專屬貼圖（頭目 boss.png）：缺檔時載入失敗就略過，退回重新上色的圖
     const own = new Set(Object.values(PD.config.enemies).filter((d) => d.art).map((d) => d.art.file));
     own.forEach((f) => { if (!this.textures.exists('art_' + f)) this.load.image('art_' + f, 'assets/local-art/' + f + '.png'); });
+    // 卡片特寫（card-<代號>.png）與第 4～6 關的圖檔背景（bgArt）：缺檔一樣略過，退回原本的小全身圖／程式畫的草地
+    PD.config.cardOrder.filter((k) => PD.config.units[k].cardArt)
+      .forEach((k) => this.load.image('cardArt_' + k, 'assets/local-art/card-' + k + '.png'));
+    PD.config.levels.filter((lv) => lv.bgArt)
+      .forEach((lv) => this.load.image('bgArt_' + lv.number, 'assets/local-art/' + lv.bgArt.file + '.png'));
     // 待機動畫只載入事先確認存在的檔案（見下方 probeIdleSheets）
     Object.keys(PD.idleSheetFound).forEach((k) => {
       this.load.image('idle_' + k, 'assets/local-art/' + PD.config.units[k].idleSheet.file + '.png');
@@ -85,6 +90,18 @@ PD.StartScene = class StartScene extends Phaser.Scene {
     PD.Sound.play('tap');
     this.scene.start('Map', { mode });
   }
+};
+
+// 所有「缺檔就退回」的本機貼圖檔名（不含 .png）：自動測試用來判斷哪些 404 是預期內
+PD.optionalArtFiles = function () {
+  const C = PD.config;
+  return [
+    ...C.cardOrder, ...Object.keys(C.enemies),
+    ...Object.values(C.enemies).filter((d) => d.art).map((d) => d.art.file),
+    ...C.cardOrder.filter((k) => C.units[k].cardArt).map((k) => 'card-' + k),
+    ...C.levels.filter((lv) => lv.bgArt).map((lv) => lv.bgArt.file),
+    ...Object.values(C.units).filter((d) => d.idleSheet).map((d) => d.idleSheet.file),
+  ];
 };
 
 // 禁止雙指縮放、雙擊放大與拖動畫面

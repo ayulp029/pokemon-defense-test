@@ -167,37 +167,47 @@ window.PD = window.PD || {};
   };
 
   // ===== 我方角色（內部代號不含角色名稱）=====
+  // cardArt＝卡片特寫（assets/local-art/card-<代號>.png，512×512、面朝右）要取哪一塊放進卡片的頭像窗（100×82）。
+  //   取的範圍都是 320×262（和頭像窗同比例）；臉放在右半邊，左上角留給價格徽章。缺檔時退回原本的小全身圖
   const units = {
     trainer: {
+      cardArt: { x: 40, y: 20, w: 320, h: 262 },
       cost: 50, hp: 6, maxCount: 2, genEvery: 10,
       size: { w: 68, h: 102 }, color: 0xf2a93b, light: 0xffe2a8, icon: 'badge',
     },
     basicShooter: {
+      cardArt: { x: 170, y: 30, w: 320, h: 262 },
       cost: 75, hp: 6, range: 7, interval: 2, damage: 1, fx: 'lightning',
       size: { w: 66, h: 98 }, color: 0xf5d531, light: 0xfff3b0, icon: 'bolt',
       // 本機限定的待機動畫（assets/local-art/<file>.png）；沒有檔案就用靜態圖
       idleSheet: { file: 'basicShooter-idle', frames: 6, frameMs: 140 },
     },
     doubleStriker: {
+      cardArt: { x: 150, y: 70, w: 320, h: 262 },
       cost: 100, hp: 8, range: 2, interval: 2, damage: 2, secondHitDelay: 0.3, cleave: true, melee: true, fx: 'vine', // melee＝打不到飛行敵人
       size: { w: 70, h: 100 }, color: 0x46b868, light: 0xc6f2c8, icon: 'leaf',
     },
     tank: {
+      cardArt: { x: 130, y: 50, w: 320, h: 262 },
       cost: 125, hp: 40, thorns: 1,
       size: { w: 82, h: 115 }, color: 0x5a7ea6, light: 0xdbe6f2, icon: 'shield',
     },
     slowShooter: {
+      cardArt: { x: 150, y: 20, w: 320, h: 262 }, // 用 v2 特寫
       cost: 125, hp: 6, range: 3, interval: 2, damage: 1, fx: 'water',
       slow: { factor: 0.5, seconds: 3 },
       size: { w: 68, h: 100 }, color: 0x3aa7e8, light: 0xc8ecff, icon: 'drop',
     },
     burnShooter: {
+      cardArt: { x: 90, y: 10, w: 320, h: 262 },
       cost: 150, hp: 6, range: 3, interval: 2, damage: 1, fx: 'fire',
       burn: { perSecond: 1, seconds: 3 },
       size: { w: 68, h: 100 }, color: 0xee6a3a, light: 0xffd6b8, icon: 'flame',
     },
     // 穿透波紋：同一條路前方所有敵人各打 1。range 10 表示從任何一欄都能打到出怪點
     pierceShooter: {
+      // 卡片用 v2 特寫（擁有者 2026-11-10 要求）；場上的角色仍是程式畫的造型（noArt）
+      cardArt: { x: 160, y: 60, w: 320, h: 262 },
       cost: 175, hp: 6, range: 10, interval: 2, damage: 1, pierce: true, fx: 'crystal',
       size: { w: 68, h: 100 }, color: 0x7fb8ea, light: 0xe2f3ff, icon: 'gem',
       // noArt＝不載入 assets/local-art 的貼圖，用程式畫的造型（現有貼圖太接近官方角色，見 CLAUDE.md 2.5 節）
@@ -235,11 +245,14 @@ window.PD = window.PD || {};
     runner: { hp: 6, secPerCell: 5, size: { w: 62, h: 94 }, color: 0xe88fb0, light: 0xfde0ea, shape: 'swift' },
     armored: { hp: 12, secPerCell: 10, size: { w: 72, h: 108 }, color: 0x6c7484, light: 0xc2c9d6, shape: 'plated', accessory: 'pads' },
     // artFrom＝用哪張已公開貼圖重新上色（程式即時畫，不產生新圖檔），recolor＝上色的顏色，outline＝描邊色。缺貼圖時退回 shape 色塊
-    bruiser: { hp: 24, secPerCell: 5.5, size: { w: 80, h: 112 }, color: 0x6f7f92, light: 0xcfd8e3, shape: 'plated', artFrom: 'tank', recolor: 0x8596ab, outline: 0x27313d, accessory: 'pads' },
-    healer: { hp: 7, secPerCell: 3.25, size: { w: 62, h: 94 }, color: 0xf08bb4, light: 0xffe0ec, shape: 'stripe', artFrom: 'doubleStriker', recolor: 0xff7fb0, outline: 0xb0296a, accessory: 'cross', heal: { amount: 2, every: 3, reach: 2 } },
-    jumper: { hp: 6, secPerCell: 3, size: { w: 72, h: 80 }, bodyBox: { x: 2, y: 0, w: 68, h: 70 }, color: 0x35b5a8, light: 0xc8f5ee, shape: 'swift', artFrom: 'burnShooter', recolor: 0x2fc4b4, outline: 0x0d5a55, accessory: 'spring', hopOver: true },
-    splitter: { hp: 9, secPerCell: 3.25, size: { w: 58, h: 96 }, color: 0xd9544f, light: 0xffd9d0, shape: 'robot', artFrom: 'trainer', recolor: 0xe2453c, outline: 0x7a1414, accessory: 'twin', splitInto: { kind: 'splitling', count: 2 } },
-    splitling: { hp: 3, secPerCell: 2.6, size: { w: 40, h: 66 }, color: 0xf0817a, light: 0xffe4df, shape: 'robot', artFrom: 'trainer', recolor: 0xf26a5e, outline: 0x7a1414, noOrb: true },
+    // batch2 專屬貼圖（2026-11-10 擁有者要求接入；assets/local-art/<file>.png，面朝左）：art 的用法和頭目一樣（box＝取哪一塊，
+    // 左右以腳底中心對稱、含整隻不裁切；size＝有貼圖時的畫面大小）。圖上已有十字、彈簧、肩甲，不再加程式配件。
+    // 缺檔時退回下面的 artFrom 重新上色＋程式配件。小搗蛋只取雙胞搗蛋圖右邊那一隻
+    bruiser: { art: { file: 'bruiser', box: { x: 0, y: 16, w: 202, h: 262 }, size: { w: 88, h: 114 } }, hp: 24, secPerCell: 5.5, size: { w: 80, h: 112 }, color: 0x6f7f92, light: 0xcfd8e3, shape: 'plated', artFrom: 'tank', recolor: 0x8596ab, outline: 0x27313d, accessory: 'pads' },
+    healer: { art: { file: 'healer', box: { x: 21, y: 36, w: 110, h: 208 }, size: { w: 52, h: 98 } }, hp: 7, secPerCell: 3.25, size: { w: 62, h: 94 }, color: 0xf08bb4, light: 0xffe0ec, shape: 'stripe', artFrom: 'doubleStriker', recolor: 0xff7fb0, outline: 0xb0296a, accessory: 'cross', heal: { amount: 2, every: 3, reach: 2 } },
+    jumper: { art: { file: 'jumper', box: { x: 0, y: 96, w: 152, h: 148 }, size: { w: 78, h: 76 } }, hp: 6, secPerCell: 3, size: { w: 72, h: 80 }, bodyBox: { x: 2, y: 0, w: 68, h: 70 }, color: 0x35b5a8, light: 0xc8f5ee, shape: 'swift', artFrom: 'burnShooter', recolor: 0x2fc4b4, outline: 0x0d5a55, accessory: 'spring', hopOver: true },
+    splitter: { art: { file: 'splitter', box: { x: 2, y: 109, w: 228, h: 167 }, size: { w: 117, h: 86 } }, hp: 9, secPerCell: 3.25, size: { w: 58, h: 96 }, color: 0xd9544f, light: 0xffd9d0, shape: 'robot', artFrom: 'trainer', recolor: 0xe2453c, outline: 0x7a1414, accessory: 'twin', splitInto: { kind: 'splitling', count: 2 } },
+    splitling: { art: { file: 'splitter', box: { x: 110, y: 109, w: 120, h: 167 }, size: { w: 46, h: 64 } }, hp: 3, secPerCell: 2.6, size: { w: 40, h: 66 }, color: 0xf0817a, light: 0xffe4df, shape: 'robot', artFrom: 'trainer', recolor: 0xf26a5e, outline: 0x7a1414, noOrb: true },
     // ===== 第 4～6 關（建議值，尚未實測）=====
     // accessory＝程式畫的配件（textures.js），bodyBox＝本體在圖框裡的位置（留空間給配件）。
     // 第 2、3 關的敵人也有「職責配件」（docs/beautify-top5-v1.md 第 4 項）：補補蛙頭上十字、彈跳蜥腳下彈簧、雙胞搗蛋肩上兩顆圓點、鐵甲熊兵與厚殼機器人的肩甲
@@ -399,6 +412,9 @@ window.PD = window.PD || {};
       requiredToStart: ['trainer', 'basicShooter'],
       tutorial: { trainer: { lane: 1, col: 1 }, basicShooter: { lane: 1, col: 5 } },
       terrain: [{ type: 'water', lanes: [1, 2, 3, 4], cols: [6] }],
+      // 圖檔背景（scenery.js 的 drawBgArt）：以上方中央為中心放大 1.12 倍，把左下、右下的高灌木推出第 4 路的頭尾格；
+      // 草偏冷綠，疊一層極淡的橘色營造黃昏。缺檔時用下面 theme 的程式草地
+      bgArt: { file: 'bg-level4', scale: 1.12, ax: 590, ay: 0, tint: '255,150,70', tintAlpha: 0.08 },
       theme: {
         grassA: ['#7CB8A0', '#5F9A86'], grassB: ['#6AAF96', '#4E8F7A'], rest: ['#8AA29A', '#78908A'],
         spawn: ['#3A5F8A', '#243B5C'], village: ['#E2C39A', '#C4A074'], pennants: ['#FFD84A', '#7FD4FF'],
@@ -425,6 +441,7 @@ window.PD = window.PD || {};
         { type: 'lantern', lanes: [1, 3], cols: [4, 8] },
         { type: 'lantern', lanes: [2, 4], cols: [6] },
       ],
+      bgArt: { file: 'bg-level5', scale: 1 },
       theme: {
         grassA: ['#4F7358', '#3A5744'], grassB: ['#46684F', '#334D3D'], rest: ['#5A6A60', '#4A5850'],
         spawn: ['#2A1F3D', '#151022'], village: ['#8B7355', '#5E4A36'], pennants: ['#FFB86B', '#C9A0FF'],
@@ -452,6 +469,7 @@ window.PD = window.PD || {};
         { type: 'drumPad', lanes: [1, 3], cols: [8] },
         { type: 'drumPad', lanes: [2, 4], cols: [5] },
       ],
+      bgArt: { file: 'bg-level6', scale: 1 },
       theme: {
         grassA: ['#8AAE72', '#6F945C'], grassB: ['#80A469', '#678A55'], rest: ['#8D998C', '#79857A'],
         spawn: ['#6B3F7A', '#3E2450'], spawnMist: 'rgba(255,200,230,0.12)', pennants: ['#FF8E6E', '#FFE082'],

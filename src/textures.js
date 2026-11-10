@@ -727,6 +727,18 @@ PD.TEX_SCALE = 1 / PD.RES;
         c.scale(s, s);
         drawUnit(c, d.size.w, d.size.h, d);
       });
+      // 卡片特寫：填滿卡片的頭像窗（100×82、圓角 12），只取 cardArt 那一塊；缺檔時不產生，卡片改用上面的 cardPic
+      if (d.cardArt && scene.textures.exists('cardArt_' + k)) {
+        const face = cropArt(scene.textures.get('cardArt_' + k).getSourceImage(), d.cardArt);
+        add('cardFace_' + k, 100, 82, (c) => {
+          c.save();
+          rr(c, 0, 0, 100, 82, 12); c.clip();
+          drawArt(c, 100, 82, face);
+          c.restore();
+          rr(c, 0.75, 0.75, 98.5, 80.5, 11.5);
+          c.lineWidth = 1.5; c.strokeStyle = 'rgba(31,42,56,0.35)'; c.stroke();
+        });
+      }
     });
     Object.keys(cfg.enemies).forEach((k) => {
       const d = cfg.enemies[k];
