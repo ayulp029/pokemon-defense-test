@@ -54,6 +54,16 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     this.introKind = '';
     this.skillOrbFloat = false;
     this.skillHinted = false;
+    // 用到才建立的圖：換關或重來時 Phaser 會沿用同一個場景、舊圖已被清掉，要歸零才會重建
+    // （以前第二次進戰鬥後，新朋友／新敵人的介紹圖和「+50」飄字都不見）
+    this.introPic = null;
+    this.introArt = null;
+    this.plusText = null;
+    this.skillTipQueue = [];
+    this.skillTipKind = '';
+    this.newCards = new Set(); // 新朋友提示看過、還沒放過的卡：卡片慢慢發亮
+    this.hintClearAt = 0;
+    this.buildSpot();
 
     this.input.on('pointerdown', (p) => this.onTap(p.x / PD.RES, p.y / PD.RES));
     this.onHidden = () => { if (document.hidden) this.freeze('hidden'); };
@@ -273,6 +283,8 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     s.base.setFrame(state === 'locked' ? 'skillLocked' : (state === 'cool' ? 'skillDim_' : 'skillBase_') + s.kind);
     if (state !== 'ready') return;
     s.readyAt = this.clock;
+    this.queueSkillTip(s.kind);
+    if (was === 'cool') PD.Sound.play('skillReady'); // 聲音不受「減少特效」影響；靜音時本來就不響
     if (was === 'cool' && !reduced) { // 剛冷卻完成：彈一下、光環、星星
       s.popT = 0.3;
       s.ringT = 0.4;
@@ -286,11 +298,13 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
       const s = this.skillSlots[i];
       if (!s.enabled || !PD.hitRect(s.rect, x, y)) continue;
       PD.Sound.play('tap');
-      if (!this.sim.countUnits(s.kind)) { this.showHint(PD.text.skillNoUnit(PD.names[s.kind])); return true; }
+      if (!this.sim.countUnits(s.kind)) { this.showHint(PD.text.skillNoUnit(PD.names[s.kind]), 4); return true; }
       const caster = this.sim.skillCaster(s.kind);
-      if (!caster) { this.showHint(PD.text.skillWait); return true; }
+      if (!caster) { this.showHint(PD.text.skillWait, 4); return true; }
       s.pressT = 0.18;
       this.sim.command({ type: 'skill', id: caster.id });
+      PD.Sound.play('skill');
+      if (this.spot.kind === 'nudge-' + s.kind) this.hideSpot(); // 放過招，就不用再指給孩子看
       this.hideRange();
       this.showHint('');
       return true;
@@ -320,16 +334,135 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     const desc = terrain ? PD.text.levelTip[this.sim.level.number] : PD.text.friendDesc[kind];
     this.overlay.show(title, desc, [{ label: PD.text.gotIt, fn: () => {
       PD.friendTipSeen.add(this.modeId + ':' + kind);
+      if (!terrain) this.newCards.add(kind);
       this.friendQueue.shift();
       this.friendKind = '';
       this.introKind = '';
       if (this.introPic) this.introPic.setVisible(false);
+      this.hideSpot();
       this.overlay.hide();
       if (this.friendQueue.length) this.showFriendTip();
     } }]);
-    if (terrain) { if (this.introPic) this.introPic.setVisible(false); return; }
+    PD.Sound.play('tip');
+    if (terrain) { this.hideSpot(); if (this.introPic) this.introPic.setVisible(false); return; }
     if (!this.introPic) this.introPic = PD.img(this, this.L.width / 2 - 230, 500, 'unit_' + kind).setDepth(501);
-    this.introPic.setFrame('unit_' + kind).setVisible(true).setScale(PD.TEX_SCALE);
+    this.introPic.setFrame('unit_' + kind).setVisible(true).setScale(PD.TEX_SCALE).setPosition(this.L.width / 2 - 230, 500);
+    const card = this.cards.find((c) => c.kind === kind);
+    if (card) this.showSpot('card-' + kind, card.rect, 'down', PD.text.spotCard, this.cardParts(card));
+  }
+
+  // ===== 新招式第一次能用：和新敵人提示同一套畫面，並把左邊那顆圖示亮出來 =====
+  // 已過關重玩、同一次開啟遊戲看過、debug.unlockAll 都不再跳（和新朋友提示一樣）
+  queueSkillTip(kind) {
+    PD.friendTipSeen = PD.friendTipSeen || new Set();
+    const key = this.modeId + ':skill:' + kind;
+    if (this.cfg.debug.unlockAll || PD.friendTipSeen.has(key) || this.skillTipQueue.indexOf(kind) >= 0 || this.skillTipKind === kind) return;
+    if (PD.Progress.isCleared(this.modeId, this.cfg.units[kind].unlock)) return;
+    this.skillTipQueue.push(kind);
+  }
+
+  // 每一格畫面檢查一次：別的提示或暫停畫面還開著就先等
+  pumpSkillTips() {
+    if (!this.skillTipQueue.length || this.overlay.visible || this.pausedBy || this.sim.state.phase !== 'battle') return;
+    this.showSkillTip(this.skillTipQueue.shift());
+  }
+
+  showSkillTip(kind) {
+    this.skillTipKind = kind;
+    this.introKind = 'skill-' + kind; // 自動試玩靠 introKind 知道畫面在等人按鈕
+    this.overlay.show(PD.text.newSkillTitle(PD.names['skill_' + kind]), PD.text.skillDesc[kind], [{ label: PD.text.gotIt, fn: () => {
+      PD.friendTipSeen.add(this.modeId + ':skill:' + kind);
+      this.skillTipKind = '';
+      this.introKind = '';
+      this.introPic.setVisible(false);
+      this.hideSpot();
+      this.overlay.hide();
+      const slot = this.skillSlots.find((s) => s.kind === kind);
+      if (slot) this.showSpot('nudge-' + kind, slot.rect, 'left', PD.text.spotSkill, [], 6); // 關掉後再指 6 秒
+    } }]);
+    PD.Sound.play('tip');
+    // 右邊放一顆大大的招式圖示（左邊留給指向真正圖示的箭頭）
+    const px = this.L.width / 2 + 290;
+    if (!this.introPic) this.introPic = PD.img(this, 0, 0, 'skillBase_' + kind).setDepth(501);
+    this.introPic.setFrame('skillBase_' + kind).setVisible(true).setPosition(px, 500).setScale(PD.TEX_SCALE * 1.5);
+    const slot = this.skillSlots.find((s) => s.kind === kind);
+    if (slot) this.showSpot('skill-' + kind, slot.rect, 'left', PD.text.spotSkill, [slot.glow, slot.base, slot.art, slot.lock, slot.secs]);
+    if (!this.introArt) this.introArt = PD.img(this, 0, 0, 'skillArt_' + kind).setDepth(502);
+    this.introArt.setFrame('skillArt_' + kind).setVisible(true).setPosition(px, 500).setScale(PD.TEX_SCALE * 1.5);
+  }
+
+  // ===== 高亮提示：把要看的東西提到暗幕上面，旁邊一個輕輕擺動的箭頭和一句話 =====
+  buildSpot() {
+    this.spot = { kind: '', raised: [], rect: null, dir: 'down', until: 0 };
+    this.spotG = this.add.graphics().setDepth(620).setVisible(false);
+    this.spotText = PD.txt(this, 0, 0, '', 26, '#fff3b0', 5).setDepth(621).setVisible(false);
+  }
+
+  cardParts(card) {
+    return [card.glow, card.bg, card.edge, card.plate, card.pic, card.name, card.badge, card.coin, card.cost];
+  }
+
+  // parts＝要提到暗幕上面的物件（提示關掉時放回原本的深度）；seconds＞0 表示沒有暗幕、幾秒後（真實時間）自己收起來
+  showSpot(kind, rect, dir, label, parts, seconds) {
+    this.hideSpot();
+    this.spot.kind = kind;
+    this.spot.rect = rect;
+    this.spot.dir = dir;
+    this.spot.until = seconds ? this.clock + seconds : 0;
+    this.spot.raised = parts.filter(Boolean).map((o) => [o, o.depth]);
+    this.spot.raised.forEach(([o, d]) => o.setDepth(d + 210));
+    const t = this.spotText.setText(label).setVisible(true);
+    if (dir === 'down') t.setPosition(rect.x + rect.w / 2, rect.y - 70);
+    else t.setPosition(rect.x + rect.w + 150, rect.y + rect.h / 2);
+    this.spotG.setVisible(true);
+  }
+
+  hideSpot() {
+    if (this.introArt) this.introArt.setVisible(false);
+    if (!this.spot.kind) return;
+    this.spot.raised.forEach(([o, d]) => o.setDepth(d));
+    this.spot.raised = [];
+    this.spot.kind = '';
+    this.spotG.clear().setVisible(false);
+    this.spotText.setVisible(false);
+  }
+
+  // 箭頭每 1 秒輕輕擺一次（真實時間，不跟著速度鈕）；減少特效時不擺動、不呼吸
+  updateSpot() {
+    const sp = this.spot;
+    if (!sp.kind) return;
+    if (sp.until && this.clock >= sp.until) { this.hideSpot(); return; }
+    const g = this.spotG.clear();
+    const r = sp.rect;
+    const still = this.fx.reduced;
+    const bob = still ? 0 : Math.sin(this.clock * Math.PI * 2) * 6;
+    g.lineStyle(5, 0xffe84a, still ? 1 : 0.75 + 0.25 * Math.sin(this.clock * Math.PI * 2 / 1.2));
+    if (sp.dir === 'down') {
+      g.strokeRoundedRect(r.x - 4, r.y - 4, r.w + 8, r.h + 8, 16);
+      this.arrow(g, r.x + r.w / 2, r.y - 10 + bob, 0, 1);
+    } else {
+      g.strokeCircle(r.x + r.w / 2, r.y + r.h / 2, r.w / 2 + 1);
+      this.arrow(g, r.x + r.w + 6 - bob, r.y + r.h / 2, -1, 0);
+    }
+  }
+
+  // 箭頭尖端在 (x, y)，往 (dx, dy) 指；黃心深色外框，和按鈕同一套風格
+  arrow(g, x, y, dx, dy) {
+    const px = -dy;
+    const py = dx;
+    const shape = (s) => {
+      const p = [[0, 0], [22, 18], [22, 8], [46, 8], [46, -8], [22, -8], [22, -18]];
+      g.beginPath();
+      p.forEach(([a, b], i) => {
+        const X = x - dx * a * s + px * b * s;
+        const Y = y - dy * a * s + py * b * s;
+        if (i) g.lineTo(X, Y); else g.moveTo(X, Y);
+      });
+      g.closePath();
+      g.fillPath();
+    };
+    g.fillStyle(0x1f2a38, 1); shape(1.2);
+    g.fillStyle(0xffe84a, 1); shape(1);
   }
 
   // 新敵人第一次出現：暫停戰鬥介紹一次
@@ -337,12 +470,13 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     if (this.introDone.has(kind)) return;
     this.introDone.add(kind);
     this.introKind = kind;
+    PD.Sound.play('tip');
     this.overlay.show(PD.text.newEnemyTitle(PD.names[kind]), PD.text.enemyDesc[kind], [
       { label: PD.text.resume, fn: () => { this.introKind = ''; this.introPic.setVisible(false); this.overlay.hide(); } },
     ]);
     if (!this.introPic) this.introPic = PD.img(this, this.L.width / 2 - 230, 500, 'enemy_' + kind).setDepth(501); // 在「繼續」鈕左邊，不壓到按鈕
     const size = this.cfg.enemies[kind].size;
-    this.introPic.setFrame('enemy_' + kind).setVisible(true).setScale(PD.TEX_SCALE * Math.min(1, 130 / size.h));
+    this.introPic.setFrame('enemy_' + kind).setVisible(true).setPosition(this.L.width / 2 - 230, 500).setScale(PD.TEX_SCALE * Math.min(1, 130 / size.h));
   }
 
   // ===== 物件池：角色／敵人 =====
@@ -446,6 +580,9 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     this.syncViews(this.accum / this.cfg.rules.tickSeconds);
     this.updateHud(dt);
     this.updateSkillBar(dt);
+    this.pumpSkillTips();
+    this.updateSpot();
+    if (this.hintClearAt && this.clock >= this.hintClearAt) { this.hintClearAt = 0; this.showHint(''); }
     this.skillFx.update(worldDt);
     this.fx.update(worldDt);
     this.updateQuality(delta);
@@ -486,7 +623,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
           this.fx.emit('ring', v.c.x, v.c.y - v.h * 0.5, 0xff9ad8, { vx: 0, vy: 0, life: 0.6, s0: 0.5, s1: 3, a: 0.8 });
           this.fx.emit('ring', v.c.x, v.c.y - v.h * 0.5, 0xffe082, { vx: 0, vy: 0, life: 0.8, s0: 0.3, s1: 2.4, a: 0.6 });
           PD.Sound.play('bump');
-          this.showHint(PD.text.rallyHint);
+          this.showHint(PD.text.rallyHint, 4);
         }
         break;
       case 'bossWarn': this.warnBoss(ev.lane); break;
@@ -507,6 +644,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
         break;
       case 'placed':
         PD.Sound.play('place');
+        this.newCards.delete(ev.kind);
         this.setSelected(null);
         this.refreshPrepHint();
         this.pendingLandId = ev.id;
@@ -540,7 +678,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
         if (v) { v.homed = true; }
         PD.Sound.play('home');
         this.fx.shake();
-        this.showHint(PD.text.rescued);
+        this.showHint(PD.text.rescued, 4);
         break;
       case 'unitHit':
         if (v) {
@@ -562,7 +700,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
         this.ballBump = 0.2;
         PD.Sound.play('collect');
         this.exitRecall();
-        this.showHint(PD.text.recallDone(PD.names[ev.kind]));
+        this.showHint(PD.text.recallDone(PD.names[ev.kind]), 4);
         this.refreshPrepHint();
         break;
       case 'orbCollected':
@@ -749,7 +887,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     const ready = this.sim.state.phase === 'battle' && this.sim.skillReadyAt(u.kind) <= this.sim.state.tick;
     if (ready && !v.readyOn) {
       v.land = 0.2;
-      if (!this.skillHinted) { this.skillHinted = true; this.showHint(PD.text.skillReady); }
+      if (!this.skillHinted) { this.skillHinted = true; this.showHint(PD.text.skillReady, 6); }
     }
     v.readyOn = ready;
     v.ready.setVisible(ready);
@@ -868,7 +1006,8 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     const L = this.L;
     const G = L.grid;
     const sx = G.x + G.cols * G.cellW;
-    this.showHint(PD.text.bossComing);
+    this.showHint(PD.text.bossComing, 5);
+    PD.Sound.play('bossWarn');
     const img = this.bossWarnImg;
     this.tweens.killTweensOf(img);
     img.setPosition(sx + (L.width - sx) / 2, this.laneY(lane)).setDisplaySize(L.width - sx, G.cellH).setVisible(true).setAlpha(0.05);
@@ -944,7 +1083,9 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     if (v.hover) offY -= v.hover + Math.sin(this.worldClock * 3 + v.seed) * 4; // 飛在空中，影子留在地上
     if (v.flash > 0) {
       v.flash -= dt;
-      v.body.setTintFill(0xffffff);
+      // 隊長／大王很大又一直被打：整隻變白剪影太刺眼，改成淡淡的粉紅色調；一般敵人照舊閃白
+      if (v.isEnemy && this.cfg.enemies[v.kind].boss) v.body.setTint(0xffc4cc);
+      else v.body.setTintFill(0xffffff);
       v.tintNow = -1; // 閃白結束後重新套色
       offX += Math.sin(v.flash * 90) * 2;
     } else {
@@ -1030,7 +1171,8 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
       card.pressT = Math.max(0, card.pressT - dt);
       card.cd.setVisible(cdRatio > 0);
       if (cdRatio > 0) card.cd.setDisplaySize(card.rect.w, card.rect.h * cdRatio);
-      const on = this.selected === card.kind || tut === card.kind;
+      // 新朋友還沒放過、現在買得起：卡片外圈慢慢發亮，提醒孩子試試看
+      const on = this.selected === card.kind || tut === card.kind || (canBuy && this.newCards.has(card.kind));
       card.glow.setVisible(on);
       if (on) card.glow.setAlpha(this.selected === card.kind ? 0.9 : pulse);
       const dy = (card.pressT > 0 ? 4 : 0) - (this.selected === card.kind ? 6 : 0);
@@ -1100,7 +1242,11 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     }
   }
 
-  showHint(str) { this.hintText.setText(str); }
+  // seconds＞0：過幾秒（真實時間）自己清掉，舊提示不會一直掛在上面；換成別句時以新的那句為準
+  showHint(str, seconds) {
+    this.hintText.setText(str);
+    this.hintClearAt = seconds ? this.clock + seconds : 0;
+  }
 
   // ===== 選卡與射程預覽 =====
   setSelected(kind) {
@@ -1325,6 +1471,9 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
   showPauseOverlay() {
     const T = PD.text;
     const label = () => (PD.settings.reduceFx ? T.reduceFxOn : T.reduceFxOff);
+    // 介紹圖與高亮箭頭不可留在暫停畫面上（按「繼續」後介紹會重新顯示）
+    this.hideSpot();
+    if (this.introPic) this.introPic.setVisible(false);
     this.overlay.show(T.pauseTitle, T.levelLabel(this.sim.level.number), [
       { label: T.resume, fn: () => this.resume() },
       { label: label(), fn: () => { PD.settings.reduceFx = !PD.settings.reduceFx; this.overlay.relabel(1, label()); } },
@@ -1339,6 +1488,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     this.accum = 0;
     // 切分頁把新敵人介紹蓋掉時，回來要接著顯示
     if (this.friendKind) { this.showFriendTip(); return; }
+    if (this.skillTipKind) { this.showSkillTip(this.skillTipKind); return; }
     if (this.introKind) { const k = this.introKind; this.introDone.delete(k); this.showEnemyIntro(k); return; }
     // 從暫停回來時，若剛好在波次提示要重新顯示
     if (this.sim.state.waitingHint) {

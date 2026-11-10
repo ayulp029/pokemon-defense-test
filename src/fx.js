@@ -201,6 +201,7 @@ PD.Fx = class Fx {
     if (nowMs - this.lastShake < this.cfg.fx.shakeMinGapMs) return;
     this.lastShake = nowMs;
     this.scene.cameras.main.shake(this.cfg.fx.shakeMs, this.cfg.fx.shakeIntensity);
+    PD.buzz(30);
   }
 
   // 技能用：依規格指定的像素與毫秒；「減少特效」開啟時完全不震動，不支援時本來就只是沒有效果

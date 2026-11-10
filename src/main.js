@@ -2,6 +2,13 @@
 window.PD = window.PD || {};
 PD.settings = { reduceFx: false, speedIndex: 0 };
 
+// 裝置震動（只跟著畫面震動用在重要時刻）：「減少特效」開啟時完全不震。
+// iPad 的 Safari 沒有震動功能，呼叫了也只是沒有效果；有支援的手機／平板才會輕震一下
+PD.buzz = function (ms) {
+  if (PD.settings.reduceFx || !navigator.vibrate) return;
+  try { navigator.vibrate(ms); } catch (e) { /* 不支援就算了 */ }
+};
+
 PD.setupCamera = function (scene) {
   scene.cameras.main.setOrigin(0, 0).setZoom(PD.RES);
 };
