@@ -215,9 +215,13 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
       const base = PD.img(this, B.x, y, 'skillLocked').setDepth(400).setVisible(enabled);
       const art = PD.img(this, B.x, y, 'skillArt_' + kind).setDepth(401).setVisible(false);
       const lock = PD.img(this, B.x, y, 'lock').setDepth(401).setScale(PD.TEX_SCALE * 0.6).setVisible(enabled);
-      const secs = PD.txt(this, B.x, y + 19, '', 18, '#ffffff', 4).setDepth(403).setVisible(false);
+      // 冷卻秒數放在圖示下緣的深色小牌子上，不再壓住圖案（只畫一次，跟著數字一起顯示／隱藏）
+      const secsBg = this.add.graphics({ x: B.x, y: y + B.size / 2 - 6 }).setDepth(403).setVisible(false);
+      secsBg.fillStyle(0x1d2a3a, 0.92).fillRoundedRect(-19, -11, 38, 22, 11);
+      secsBg.lineStyle(2, 0xffffff, 0.9).strokeRoundedRect(-19, -11, 38, 22, 11);
+      const secs = PD.txt(this, B.x, y + B.size / 2 - 6, '', 17, '#ffffff', 3).setDepth(404).setVisible(false);
       const rect = { x: B.x - B.hit / 2, y: y - B.hit / 2, w: B.hit, h: B.hit };
-      return { kind, x: B.x, y, enabled, glow, ring, base, art, lock, secs, rect, state: '', shown: -1, readyAt: 0, popT: 0, pressT: 0, ringT: 0 };
+      return { kind, x: B.x, y, enabled, glow, ring, base, art, lock, secs, secsBg, rect, state: '', shown: -1, readyAt: 0, popT: 0, pressT: 0, ringT: 0 };
     });
   }
 
@@ -279,6 +283,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     s.lock.setVisible(state === 'locked');
     s.art.setVisible(state !== 'locked').setTint(state === 'cool' ? 0xbfc6cf : 0xffffff);
     s.secs.setVisible(state === 'cool' && this.sim.mode.showSkillSeconds);
+    s.secsBg.setVisible(s.secs.visible);
     s.shown = -1;
     s.base.setFrame(state === 'locked' ? 'skillLocked' : (state === 'cool' ? 'skillDim_' : 'skillBase_') + s.kind);
     if (state !== 'ready') return;
@@ -386,7 +391,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     if (!this.introPic) this.introPic = PD.img(this, 0, 0, 'skillBase_' + kind).setDepth(501);
     this.introPic.setFrame('skillBase_' + kind).setVisible(true).setPosition(px, 500).setScale(PD.TEX_SCALE * 1.5);
     const slot = this.skillSlots.find((s) => s.kind === kind);
-    if (slot) this.showSpot('skill-' + kind, slot.rect, 'left', PD.text.spotSkill, [slot.glow, slot.base, slot.art, slot.lock, slot.secs]);
+    if (slot) this.showSpot('skill-' + kind, slot.rect, 'left', PD.text.spotSkill, [slot.glow, slot.base, slot.art, slot.lock, slot.secsBg, slot.secs]);
     if (!this.introArt) this.introArt = PD.img(this, 0, 0, 'skillArt_' + kind).setDepth(502);
     this.introArt.setFrame('skillArt_' + kind).setVisible(true).setPosition(px, 500).setScale(PD.TEX_SCALE * 1.5);
   }
