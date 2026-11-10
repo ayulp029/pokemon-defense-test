@@ -465,6 +465,23 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     g.fillStyle(0xffe84a, 1); shape(1);
   }
 
+  // 重來／再試這一段／過關／失敗時，把半途被蓋掉的提示收乾淨。
+  // 以前暫停時剛好開著提示、按「重來」後，提示狀態還留著：之後按「繼續」會跳出過期的介紹，
+  // 那顆招式提示也永遠不再出現；自動試玩則會一直等一顆已經不見的按鈕（卡到時間上限＝「異常」局）。
+  clearPrompts(reshow) {
+    const skill = this.skillTipKind;
+    const intro = this.introKind;
+    this.skillTipKind = '';
+    this.introKind = '';
+    // 沒按「好耶」就被打斷的招式提示放回佇列，之後再說一次；沒看完的新敵人介紹也一樣
+    if (skill) { if (this.skillTipQueue.indexOf(skill) < 0) this.skillTipQueue.unshift(skill); }
+    else if (intro && !this.friendKind) this.introDone.delete(intro);
+    if (this.introPic) this.introPic.setVisible(false);
+    this.hideSpot();
+    this.foot.setVisible(false);
+    if (reshow && this.friendKind) this.showFriendTip();
+  }
+
   // 新敵人第一次出現：暫停戰鬥介紹一次
   showEnemyIntro(kind) {
     if (this.introDone.has(kind)) return;
@@ -570,6 +587,8 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
       while (this.accum >= tick) {
         this.accum -= tick;
         sim.step();
+        // 新敵人一出現就停（介紹畫面要馬上擋住戰鬥）；卡頓時一格畫面會補跑好幾步，不能在介紹後面繼續跑
+        if (this.hasIntroEvent(sim.events)) { this.accum = 0; break; }
       }
     }
     this.drainEvents();
@@ -586,6 +605,11 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     this.skillFx.update(worldDt);
     this.fx.update(worldDt);
     this.updateQuality(delta);
+  }
+
+  hasIntroEvent(list) {
+    for (let i = 0; i < list.length; i++) if (list[i].type === 'enemyNew' && !this.introDone.has(list[i].kind)) return true;
+    return false;
   }
 
   drainEvents() {
@@ -714,8 +738,8 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
           }
         }
         break;
-      case 'won': this.exitRecall(); this.onWon(); break;
-      case 'failed': this.exitRecall(); this.onFailed(); break;
+      case 'won': this.exitRecall(); this.clearPrompts(false); this.onWon(); break;
+      case 'failed': this.exitRecall(); this.clearPrompts(false); this.onFailed(); break;
       case 'restored':
         this.clearAllViews();
         PD.Sound.startMusic();
@@ -728,6 +752,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
         this.accum = 0;
         this.hintSwapAt = 0;
         this.refreshPrepHint();
+        this.clearPrompts(true);
         break;
       default: break;
     }
