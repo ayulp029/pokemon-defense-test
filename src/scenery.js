@@ -296,44 +296,69 @@ window.PD = window.PD || {};
   }
 
   // ===== 村莊 =====
-  // 技能架：村莊欄上方一條圓角木板，每顆技能圖示一個淺凹的圓槽。只畫本關已解鎖的數量，
-  // 木板跟著變短（第 1 關只有 2 槽），不再留一排空的圓孔看起來像沒做完
-  function drawSkillRack(c, L, slots) {
-    if (slots <= 0) return;
-    const B = L.skillBar;
-    const r = B.size / 2;
-    const x0 = B.x - r - 10, w = B.size + 20;
-    const y0 = B.firstY - r - 6, h = (slots - 1) * B.gap + B.size + 12;
-    c.fillStyle = 'rgba(40,28,14,0.28)';
-    rr(c, x0 + 3, y0 + 5, w, h, 22); c.fill();
-    rr(c, x0, y0, w, h, 22);
-    c.fillStyle = hGradRack(c, x0, w);
+  function drawHouse(c, cx, by, roofLight, roofDark) {
+    c.fillStyle = 'rgba(40,30,16,0.26)';
+    c.beginPath(); c.ellipse(cx, by + 1, 44, 8, 0, 0, 7); c.fill();
+
+    // 煙囪
+    c.lineWidth = 2.5; c.strokeStyle = OUTLINE;
+    c.fillStyle = '#b5705a';
+    c.fillRect(cx + 14, by - 84, 12, 26); c.strokeRect(cx + 14, by - 84, 12, 26);
+
+    // 牆
+    c.fillStyle = vGrad(c, by - 48, by, ['#fbf1da', '#e4d2ac']);
+    c.fillRect(cx - 32, by - 48, 64, 48);
+    c.fillStyle = 'rgba(90,64,36,0.16)';
+    c.fillRect(cx + 14, by - 48, 18, 48);
+    c.strokeRect(cx - 32, by - 48, 64, 48);
+
+    // 門
+    c.beginPath();
+    c.moveTo(cx - 19, by); c.lineTo(cx - 19, by - 22);
+    c.arc(cx - 10, by - 22, 9, Math.PI, 0);
+    c.lineTo(cx - 1, by); c.closePath();
+    c.fillStyle = vGrad(c, by - 31, by, ['#94683f', '#6f4b2b']);
+    c.fill(); c.lineWidth = 2; c.stroke();
+    c.fillStyle = '#ffd84a';
+    c.beginPath(); c.arc(cx - 5, by - 13, 1.6, 0, 7); c.fill();
+
+    // 亮著燈的窗
+    softCircle(c, cx + 16, by - 25, 20, '255,226,140', 0.4);
+    c.fillStyle = vGrad(c, by - 36, by - 16, ['#fff0b0', '#f6c765']);
+    c.fillRect(cx + 7, by - 35, 18, 18);
+    c.lineWidth = 2; c.strokeRect(cx + 7, by - 35, 18, 18);
+    c.beginPath(); c.moveTo(cx + 16, by - 35); c.lineTo(cx + 16, by - 17);
+    c.moveTo(cx + 7, by - 26); c.lineTo(cx + 25, by - 26); c.stroke();
+
+    // 屋頂與瓦片
+    const roof = [[cx - 42, by - 44], [cx, by - 88], [cx + 42, by - 44]];
+    poly(c, roof);
+    c.fillStyle = vGrad(c, by - 88, by - 44, [roofLight, roofDark]);
     c.fill();
-    c.lineWidth = 3; c.strokeStyle = OUTLINE; c.stroke();
-    // 木紋
-    c.save(); rr(c, x0, y0, w, h, 22); c.clip();
-    c.strokeStyle = 'rgba(70,44,20,0.22)'; c.lineWidth = 1.5;
-    for (let gx = x0 + 14; gx < x0 + w - 6; gx += 17) {
-      c.beginPath(); c.moveTo(gx, y0); c.bezierCurveTo(gx + 4, y0 + h * 0.3, gx - 4, y0 + h * 0.7, gx, y0 + h); c.stroke();
-    }
-    c.fillStyle = 'rgba(255,240,200,0.18)'; c.fillRect(x0, y0, 7, h);
+    c.save();
+    c.clip();
+    c.strokeStyle = 'rgba(40,30,20,0.2)'; c.lineWidth = 1.5;
+    c.beginPath();
+    for (let y = by - 78; y < by - 44; y += 9) { c.moveTo(cx - 44, y); c.lineTo(cx + 44, y); }
+    c.stroke();
+    c.fillStyle = 'rgba(30,20,20,0.14)';
+    poly(c, [[cx, by - 88], [cx + 44, by - 44], [cx, by - 44]]); c.fill();
     c.restore();
-    for (let i = 0; i < slots; i++) {
-      const y = B.firstY + i * B.gap;
-      c.beginPath(); c.arc(B.x, y, r + 3, 0, 7);
-      c.fillStyle = 'rgba(52,32,14,0.45)'; c.fill();
-      c.beginPath(); c.arc(B.x, y + 2, r + 3, 0.15 * Math.PI, 0.85 * Math.PI);
-      c.strokeStyle = 'rgba(255,236,190,0.35)'; c.lineWidth = 2; c.stroke();
-    }
+    poly(c, roof);
+    c.lineWidth = 2.5; c.strokeStyle = OUTLINE; c.stroke();
   }
 
-  function hGradRack(c, x0, w) {
-    const g = c.createLinearGradient(x0, 0, x0 + w, 0);
-    g.addColorStop(0, '#b98552'); g.addColorStop(0.5, '#a3703f'); g.addColorStop(1, '#8a5a30');
-    return g;
+  function drawBush(c, x, y) {
+    [[-9, 1, 8], [8, 2, 7], [0, -3, 10]].forEach((p) => {
+      c.beginPath(); c.arc(x + p[0], y + p[1], p[2], 0, 7);
+      c.fillStyle = '#5f9455'; c.fill();
+    });
+    c.fillStyle = 'rgba(214,240,170,0.5)';
+    c.beginPath(); c.arc(x - 3, y - 7, 4, 0, 7); c.fill();
   }
 
-  function drawVillage(c, L, rand, theme, slots) {
+  // 每路一棟房子（cx＝60，屋頂最高到 by－88，不壓到草地）；屋頂上不放任何介面（技能改成點場上的角色施放）
+  function drawVillage(c, L, rand, theme) {
     const G = L.grid;
     const h = G.rows * G.cellH;
     c.fillStyle = vGrad(c, G.y, G.y + h, (theme && theme.village) || ['#d6c698', '#ad9869']);
@@ -346,10 +371,20 @@ window.PD = window.PD || {};
       c.fill();
     }
 
-    // 村莊欄整欄都是技能圖示（7 顆），房子會被圖示蓋住（以前第 1 路紅屋頂露在圖示旁邊很亂），
-    // 所以這裡不畫房子，改畫一座木頭「技能架」，圖示放在架上的圓槽裡。房子只留在大地圖上。
-    // （第 5 關原本屋旁的小燈籠也拿掉：會疊在木架邊緣、貼著圖示；草地上的燈籠格照舊）
-    drawSkillRack(c, L, slots);
+    const roofs = [['#ec9a7c', '#c9674a'], ['#83b6ea', '#4f84c0'], ['#efd37e', '#cda24a'], ['#9bd08a', '#65a158']];
+    L.laneY.forEach((y, i) => {
+      const by = y + 56;
+      drawHouse(c, 60, by, roofs[i][0], roofs[i][1]);
+      drawBush(c, 14, by + 2);
+      if (theme && theme.decor === 'lantern') {
+        // 屋旁的小燈籠（不在草地上，不擋格子）
+        c.strokeStyle = '#3a2a1a'; c.lineWidth = 1.5;
+        c.beginPath(); c.moveTo(104, by - 70); c.lineTo(104, by - 58); c.stroke();
+        softCircle(c, 104, by - 50, 20, '255,210,120', 0.55);
+        c.beginPath(); c.ellipse(104, by - 50, 7, 9, 0, 0, 7);
+        c.fillStyle = '#ffd27a'; c.fill(); c.lineWidth = 2; c.strokeStyle = OUTLINE; c.stroke();
+      }
+    });
   }
 
   // ===== 出怪區 =====
@@ -550,11 +585,6 @@ window.PD = window.PD || {};
     c.fillStyle = vGrad(c, G.y + fieldH - edge, G.y + fieldH, [clear, shade]); c.fillRect(G.x, G.y + fieldH - edge, fieldW, edge);
   }
 
-  // 這一關有技能插槽的角色（已解鎖、有技能，順序同卡片列）。戰鬥畫面的插槽與木架圓槽都用這張表，數量一定相同
-  PD.skillKinds = function (cfg, level) {
-    return cfg.cardOrder.filter((k) => cfg.skills[k] && (cfg.debug.unlockAll || cfg.units[k].unlock <= level.number));
-  };
-
   // 場地背景（靜態，只畫一次）
   PD.buildBackground = function (scene, cfg, level, key) {
     const L = cfg.layout;
@@ -566,7 +596,7 @@ window.PD = window.PD || {};
     const artKey = 'bgArt_' + level.number;
     const art = level.bgArt && scene.textures.exists(artKey) ? scene.textures.get(artKey).getSourceImage() : null;
     if (art) drawBgArt(c, L, art, level.bgArt);
-    drawVillage(c, L, rand, level.theme, PD.skillKinds(cfg, level).length);
+    drawVillage(c, L, rand, level.theme);
     drawSpawn(c, cfg, level, rand);
     if (art) drawFieldOnArt(c, cfg, level); else drawField(c, cfg, level, rand);
     drawChrome(c, L, rand, level.theme);
@@ -578,11 +608,10 @@ window.PD = window.PD || {};
   PD.levelBackground = function (scene, cfg, level) {
     if (!level.theme) return 'bg';
     const key = 'bg_level';
-    const id = level.number + ':' + PD.skillKinds(cfg, level).length; // 木架圓槽數不同（例如測試開了 unlockAll）也要重畫
-    if (PD.bgLevelNumber !== id) {
+    if (PD.bgLevelNumber !== level.number) {
       if (scene.textures.exists(key)) scene.textures.remove(key);
       PD.buildBackground(scene, cfg, level, key);
-      PD.bgLevelNumber = id;
+      PD.bgLevelNumber = level.number;
     }
     return key;
   };
@@ -636,11 +665,9 @@ window.PD = window.PD || {};
     scene.textures.addCanvas('mapBg', canvas);
   };
 
-  // 暫停、勝利、失敗共用的大面板；太大放不進合併大圖，自己一張。
-  // 另做一張窄的 panelNarrow（新招式提示用：面板往右讓出左邊技能欄旁的空位給箭頭與「點這裡放招！」）
+  // 暫停、勝利、失敗、各種介紹共用的大面板；太大放不進合併大圖，自己一張
   PD.buildPanel = function (scene) {
     drawPanel(scene, 'panel', 1040);
-    drawPanel(scene, 'panelNarrow', PD.config.layout.panelNarrow.w);
   };
 
   function drawPanel(scene, key, w) {

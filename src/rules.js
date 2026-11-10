@@ -40,7 +40,7 @@ PD.BattleSim = class BattleSim {
   freshState() {
     return {
       phase: 'prep', tick: 0, balls: this.tune.startBalls || this.rules.startBalls, nextId: 1,
-      nextSpawn: 0, lastSnapWave: 0, rescues: 0, placeCd: 0, kills: 0, skillAt: {},
+      nextSpawn: 0, lastSnapWave: 0, rescues: 0, placeCd: 0, kills: 0,
       waitingHint: false, hintLanes: [], skySeq: 0, units: [], enemies: [], orbs: [], zones: [], introduced: [], rallyEnd: 0, rallyFactor: 1,
     };
   }
@@ -591,33 +591,13 @@ PD.BattleSim = class BattleSim {
     const s = this.state;
     if (!this.cfg.skills[u.kind]) return 'none';
     if (s.phase !== 'battle' || s.waitingHint) return 'phase';
-    return s.tick < this.skillReadyAt(u.kind) ? 'cooldown' : null;
+    return s.tick < (u.skillAt || 0) ? 'cooldown' : null;
   }
 
-  // 剩餘冷卻比例 0～1（給畫面的圓環用）
-  skillLeft(kind) {
-    return Math.max(0, Math.min(1, (this.skillReadyAt(kind) - this.state.tick) / this.skillTicks(kind)));
-  }
-
-  // 同一種角色共用一個冷卻：回傳這種角色的技能在第幾格時間好（沒放過就是 0）
-  skillReadyAt(kind) { return this.state.skillAt[kind] || 0; }
-
-  // 點圖示時由誰施放：已就緒的同類型裡，同路前方敵人最靠近的那隻；都沒有敵人就是最早放下的
-  skillCaster(kind) {
-    let best = null;
-    let bestX = Infinity;
-    const units = this.state.units;
-    for (let i = 0; i < units.length; i++) {
-      const u = units[i];
-      if (u.kind !== kind || this.skillProblem(u)) continue;
-      let x = Infinity;
-      for (let j = 0; j < this.state.enemies.length; j++) {
-        const e = this.state.enemies[j];
-        if (e.lane === u.lane && e.x > u.col && e.hp > 0 && e.x < x) x = e.x;
-      }
-      if (!best || x < bestX) { best = u; bestX = x; }
-    }
-    return best;
+  // 剩餘冷卻比例 0～1（給角色身上的倒數圓環用）；每隻角色自己一個冷卻，存在 u.skillAt（可以再放的那一格時間）
+  skillLeft(u) {
+    if (!this.cfg.skills[u.kind]) return 0;
+    return Math.max(0, Math.min(1, ((u.skillAt || 0) - this.state.tick) / this.skillTicks(u.kind)));
   }
 
   castSkill(id) {
@@ -625,7 +605,7 @@ PD.BattleSim = class BattleSim {
     if (!u || this.skillProblem(u)) return;
     const now = this.state.tick;
     const sk = this.cfg.skills[u.kind];
-    this.state.skillAt[u.kind] = now + this.skillTicks(u.kind);
+    u.skillAt = now + this.skillTicks(u.kind);
     const ev = { type: 'skill', id: u.id, kind: u.kind, lane: u.lane, col: u.col, hits: [] };
     this['skill_' + u.kind](u, sk, now, ev);
     this.events.push(ev);
@@ -731,14 +711,11 @@ PD.BattleSim = class BattleSim {
     const unit = {
       id: s.nextId++, kind: cmd.kind, lane: cmd.lane, col: cmd.col, hp: def.hp, maxHp: def.hp,
       targetId: 0, fireTick: 0, secondTick: -1, secondTarget: 0, roundGate: 0,
-      // 剛放下的角色：技能從半冷卻開始
       frenzyEnd: 0, cometAt: 0,
+      // 每隻角色自己的技能冷卻：剛放下的都從半冷卻開始（請回再放下是新角色，也是半冷卻）
+      skillAt: this.cfg.skills[cmd.kind] ? s.tick + Math.round(this.skillTicks(cmd.kind) / 2) : 0,
       genNext: def.genEvery ? s.tick + this.ticks(this.genSeconds(def)) : 0,
     };
-    // 共用冷卻：場上第一隻從半冷卻開始（不會比原本剩的短，請回再放下也洗不掉冷卻）；已有同種就沿用
-    if (this.cfg.skills[cmd.kind] && !this.countUnits(cmd.kind)) {
-      s.skillAt[cmd.kind] = Math.max(this.skillReadyAt(cmd.kind), s.tick + Math.round(this.skillTicks(cmd.kind) / 2));
-    }
     s.units.push(unit);
     this.events.push({ type: 'placed', id: unit.id, kind: cmd.kind });
     if (s.phase === 'prep' && this.level.requiredToStart.every((k) => this.countUnits(k) > 0)) {

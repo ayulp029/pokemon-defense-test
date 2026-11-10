@@ -135,11 +135,10 @@ window.PD = window.PD || {};
       burnShooter: '在前面鋪一條火焰地毯',
       pierceShooter: '四條路的敵人一起被打到',
     },
-    spotSkill: '點這裡放招！',
+    spotSkill: '點發亮的角色就能放招',
     spotCard: '新卡片在這裡',
     skillWait: '還要等一下才能再用',
-    skillReady: '可以放招了！點左邊的圖示',
-    skillNoUnit: (name) => `場上還沒有${name}`,
+    skillReady: '朋友發亮了！點它就能放招',
     // 圖鑑（大地圖右上的按鈕）：句子給 5 歲孩子聽得懂；搗蛋團是調皮，不是壞
     bestiary: '圖鑑',
     bestiaryTitle: '圖鑑',
@@ -196,11 +195,9 @@ window.PD = window.PD || {};
     recallBtn: { x: 896, y: 676, w: 136, h: 120 },
     recallGuardSeconds: 0.35, // 防止手抖連點：第一次點角色後，這段時間內的第二下不算
     orbHitSize: 64,
-    // 常駐技能圖示：放在村莊那一欄（x 0～120，不佔草地）。畫面直徑 72；點擊範圍 78，1024×768 下約 67.7 點
-    skillBar: { x: 60, firstY: 130, gap: 82, size: 72, hit: 78 },
-    // 新招式提示用的窄面板（x 350～1110，右緣和大面板一樣）：左邊讓出空位，
-    // 指向技能鈕的箭頭與「點這裡放招！」（約 x 105～335）不壓到面板。大面板是 x 70～1110
-    panelNarrow: { x: 350, w: 760 },
+    // 點場上角色放招的點擊範圍：以角色為中心的正方形邊長（邏輯像素）。76 在 1024×768 下約 66 點，給 5 歲孩子點；
+    // 相鄰兩隻重疊時取比較近的那隻。已選卡片時不用這塊範圍（點空格照樣放角色）
+    unitTapSize: 76,
     // 大地圖選關：每一關的圓鈕中心，點擊範圍是圓鈕外的正方形（200×200）
     map: {
       // 蛇行兩排：上排第 1～3 關往右，下排第 4～6 關往左；上下排相距 280，點擊範圍不重疊
@@ -290,13 +287,13 @@ window.PD = window.PD || {};
   // ===== 主動技能（毛毛設計 docs/active-skills-v1.md；建議值，尚未實測）=====
   // cd＝冷卻秒數；一起守護（5 歲）再乘 modes.together.skillCdMul；bar＝圖示底色（中心→邊緣，docs/skill-icons-v1.md）
   const skills = {
-    trainer: { cd: 45, orbs: 2, bar: ['#FFE082', '#F9A825'] },
-    basicShooter: { cd: 20, seconds: 5, rate: 3, bar: ['#FFF176', '#FBC02D'] },
-    burnShooter: { cd: 30, seconds: 6, cells: 3, burnSeconds: 3, bar: ['#FF8A50', '#E64A19'] },
-    slowShooter: { cd: 35, push: 1, damage: 1, slowSeconds: 4, slowFactor: 0.5, bar: ['#81D4FA', '#0277BD'] },
-    doubleStriker: { cd: 25, reach: 1.5, rootSeconds: 3, damage: 4, bar: ['#A5D6A7', '#2E7D32'] },
-    tank: { cd: 40, heal: 0.5, reach: 1.5, damage: 3, push: 1, stunSeconds: 2, bar: ['#BCAAA4', '#5D4037'] },
-    pierceShooter: { cd: 60, damage: 3, chargeSeconds: 0.4, bar: ['#B3E5FC', '#5C6BC0'] },
+    trainer: { cd: 70, orbs: 2, bar: ['#FFE082', '#F9A825'] },
+    basicShooter: { cd: 30, seconds: 5, rate: 3, bar: ['#FFF176', '#FBC02D'] },
+    burnShooter: { cd: 45, seconds: 6, cells: 3, burnSeconds: 3, bar: ['#FF8A50', '#E64A19'] },
+    slowShooter: { cd: 55, push: 1, damage: 1, slowSeconds: 4, slowFactor: 0.5, bar: ['#81D4FA', '#0277BD'] },
+    doubleStriker: { cd: 40, reach: 1.5, rootSeconds: 3, damage: 4, bar: ['#A5D6A7', '#2E7D32'] },
+    tank: { cd: 60, heal: 0.5, reach: 1.5, damage: 3, push: 1, stunSeconds: 2, bar: ['#BCAAA4', '#5D4037'] },
+    pierceShooter: { cd: 90, damage: 3, chargeSeconds: 0.4, bar: ['#B3E5FC', '#5C6BC0'] },
   };
 
   // ===== 敵人 =====
@@ -324,7 +321,7 @@ window.PD = window.PD || {};
     // 飄飄翼、丟丟猴、躲躲影改用 batch3 自己的圖，不再借朋友圖上色、也不畫翅膀／帽子／眼罩；缺檔時退回色塊
     // flying：不被任何角色擋住，近戰打不到；throwAt：邊走邊丟球打同路前方的遠攻角色；cloak：顯形／隱身輪流（秒）
     flyer: {
-      art: { file: 'flyer-game', book: 'flyer', anchor: { x: 120, y: 240 }, box: { x: 1, y: 63, w: 238, h: 177 }, size: { w: 110, h: 82 } },
+      art: { file: 'flyer-game', book: 'flyer', anchor: { x: 120, y: 240 }, box: { x: 6, y: 18, w: 228, h: 222 }, size: { w: 110, h: 107 } },
       hp: 4, secPerCell: 3.4, size: { w: 84, h: 72 }, color: 0x7fa8ff, light: 0xdce8ff, shape: 'swift', flying: true, hover: 34,
     },
     lobber: {

@@ -582,8 +582,9 @@ PD.TEX_SCALE = 1 / PD.RES;
       c.beginPath(); c.moveTo(5, 6); c.lineTo(23, 6); c.lineTo(5, 26); c.lineTo(23, 26); c.stroke();
     });
     add('plus', 24, 24, (c) => { c.fillStyle = '#fff'; c.fillRect(9, 3, 6, 18); c.fillRect(3, 9, 18, 6); });
-    // 常駐技能圖示（docs/skill-icons-v1.md）：亮底、暗底、鎖住底，加上一張白色圖案
-    const BAR = cfg.layout.skillBar.size;
+    // 技能圖示（docs/skill-icons-v1.md）：亮底（可以放）、暗底（冷卻中），加上一張白色圖案。
+    // 場上角色頭右上角用縮小的（約 32），新招式提示用放大的
+    const BAR = 72;
     const BF = BAR + 4;
     Object.keys(cfg.skills).forEach((k) => {
       const [c0, c1] = cfg.skills[k].bar;
@@ -591,7 +592,6 @@ PD.TEX_SCALE = 1 / PD.RES;
       add('skillDim_' + k, BF, BF, (c) => drawSkillBase(c, BF, desaturate(c0), desaturate(c1), '#a4acb5', true));
       add('skillArt_' + k, 44, 44, (c) => { c.strokeStyle = OUTLINE; c.lineWidth = 2; c.lineJoin = 'round'; c.lineCap = 'round'; skillArt[k](c); });
     });
-    add('skillLocked', BF, BF, (c) => drawSkillBase(c, BF, '#9aa5b0', '#5f6a75', '#c9ced6', false));
     add('iconBurn', 20, 20, (c) => { c.strokeStyle = OUTLINE; c.lineWidth = 1.5; c.translate(0, 10); icons.flame(c, 10, 8, '#ff9a3c'); });
     add('iconSlow', 20, 20, (c) => { c.strokeStyle = OUTLINE; c.lineWidth = 1.5; c.translate(0, 10); icons.drop(c, 10, 8, '#6cc7ff'); });
     add('shield', 26, 30, (c) => { c.strokeStyle = OUTLINE; c.lineWidth = 2; c.translate(0, 15); icons.shield(c, 13, 13, '#7fd0ff'); });

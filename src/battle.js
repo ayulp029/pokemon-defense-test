@@ -50,7 +50,6 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     this.buildGridHelpers();
     this.buildHud();
     this.buildCards();
-    this.buildSkillBar();
     this.introDone = new Set();
     this.introKind = '';
     this.skillOrbFloat = false;
@@ -221,128 +220,6 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     this.actionParts.forEach((o) => o.setAlpha(lit ? 1 : 0.45));
   }
 
-  // ===== 常駐技能圖示列 =====
-  // 每種角色一顆，順序同卡片列；本關還沒解鎖的角色完全不做插槽（不畫、不能點），
-  // 已解鎖的由上往下緊排，中間不留空洞（背景木架的圓槽數也一樣，見 scenery.js 的 PD.skillKinds）
-  buildSkillBar() {
-    const B = this.L.skillBar;
-    this.skillSweep = this.add.graphics().setDepth(402);
-    this.skillSlots = PD.skillKinds(this.cfg, this.sim.level).map((kind, i) => {
-      const y = B.firstY + i * B.gap;
-      const enabled = true;
-      const glow = this.add.image(B.x, y, 'atlas', 'glow').setDepth(399).setBlendMode(Phaser.BlendModes.ADD)
-        .setTint(parseInt(this.cfg.skills[kind].bar[1].slice(1), 16)).setScale(PD.TEX_SCALE * (B.size * 1.5) / 96).setVisible(false);
-      const ring = this.add.image(B.x, y, 'atlas', 'ring').setDepth(404).setBlendMode(Phaser.BlendModes.ADD).setVisible(false);
-      const base = PD.img(this, B.x, y, 'skillLocked').setDepth(400).setVisible(enabled);
-      const art = PD.img(this, B.x, y, 'skillArt_' + kind).setDepth(401).setVisible(false);
-      const lock = PD.img(this, B.x, y, 'lock').setDepth(401).setScale(PD.TEX_SCALE * 0.6).setVisible(enabled);
-      // 冷卻秒數放在圖示下緣的深色小牌子上，不再壓住圖案（只畫一次，跟著數字一起顯示／隱藏）
-      const secsBg = this.add.graphics({ x: B.x, y: y + B.size / 2 - 6 }).setDepth(403).setVisible(false);
-      secsBg.fillStyle(0x1d2a3a, 0.92).fillRoundedRect(-19, -11, 38, 22, 11);
-      secsBg.lineStyle(2, 0xffffff, 0.9).strokeRoundedRect(-19, -11, 38, 22, 11);
-      const secs = PD.txt(this, B.x, y + B.size / 2 - 6, '', 17, '#ffffff', 3).setDepth(404).setVisible(false);
-      const rect = { x: B.x - B.hit / 2, y: y - B.hit / 2, w: B.hit, h: B.hit };
-      return { kind, x: B.x, y, enabled, glow, ring, base, art, lock, secs, secsBg, rect, state: '', shown: -1, readyAt: 0, popT: 0, pressT: 0, ringT: 0 };
-    });
-  }
-
-  updateSkillBar(dt) {
-    const g = this.skillSweep;
-    g.clear();
-    const reduced = this.fx.reduced;
-    const battle = this.sim.state.phase === 'battle';
-    for (let i = 0; i < this.skillSlots.length; i++) {
-      const s = this.skillSlots[i];
-      if (!s.enabled) continue;
-      const onField = this.sim.countUnits(s.kind) > 0;
-      const left = onField ? this.sim.skillLeft(s.kind) : 0;
-      const state = !onField ? 'locked' : (left <= 0 && battle ? 'ready' : 'cool');
-      if (state !== s.state) this.setSkillState(s, state, reduced);
-
-      s.popT = Math.max(0, s.popT - dt);
-      s.pressT = Math.max(0, s.pressT - dt);
-      let scale = 1;
-      if (!reduced && s.popT > 0) scale = 1 + 0.15 * Math.sin(Math.PI * (1 - s.popT / 0.3));
-      if (!reduced && s.pressT > 0) scale = 1 - 0.1 * Math.sin(Math.PI * (1 - s.pressT / 0.18));
-      s.base.setScale(PD.TEX_SCALE * scale);
-
-      if (s.ringT > 0) {
-        s.ringT = Math.max(0, s.ringT - dt);
-        const p = 1 - s.ringT / 0.4;
-        s.ring.setVisible(s.ringT > 0).setAlpha(0.8 * (1 - p)).setScale(PD.TEX_SCALE * (this.L.skillBar.size / 2 / 44) * (1 + 0.4 * p));
-      }
-
-      if (state === 'ready') {
-        s.glow.setVisible(!reduced);
-        s.glow.setAlpha(0.75 + 0.25 * Math.sin(this.clock * Math.PI * 2 / 1.2)); // 每 1.2 秒呼吸一次（0.5～1），用真實時間
-        const t = (this.clock - s.readyAt) % 3;
-        const bounce = !reduced && t < 0.25 ? 1 + 0.08 * Math.sin(Math.PI * t / 0.25) : 1;
-        s.art.setScale(PD.TEX_SCALE * scale * bounce);
-      } else if (state === 'cool') {
-        s.art.setScale(PD.TEX_SCALE * scale);
-        const end = -Math.PI / 2 + (1 - left) * Math.PI * 2; // 從 12 點鐘順時針長滿＝已恢復的部分
-        const R = this.L.skillBar.size / 2;
-        g.fillStyle(0xffffff, 0.35);
-        g.slice(s.x, s.y, (R - 6) * scale, -Math.PI / 2, end, false);
-        g.fillPath();
-        g.lineStyle(3, 0xffffff, 1);
-        g.beginPath();
-        g.arc(s.x, s.y, (R - 4) * scale, -Math.PI / 2, end, false);
-        g.strokePath();
-        if (this.sim.mode.showSkillSeconds) {
-          // 夾在 0 以上：開戰前／過關後冷卻停住時，tick 可能已超過 readyAt，不可顯示負數（例如「-12」）
-          const n = Math.max(0, Math.ceil((this.sim.skillReadyAt(s.kind) - this.sim.state.tick) / this.sim.tps));
-          if (n !== s.shown) { // 只有數字變了才重畫文字；倒數到 0 就不再顯示秒數牌子
-            s.shown = n;
-            s.secs.setText(String(n)).setVisible(n > 0);
-            s.secsBg.setVisible(n > 0);
-          }
-        }
-      }
-    }
-  }
-
-  setSkillState(s, state, reduced) {
-    const was = s.state;
-    s.state = state;
-    s.glow.setVisible(false);
-    s.lock.setVisible(state === 'locked');
-    s.art.setVisible(state !== 'locked').setTint(state === 'cool' ? 0xbfc6cf : 0xffffff);
-    s.secs.setVisible(state === 'cool' && this.sim.mode.showSkillSeconds);
-    s.secsBg.setVisible(s.secs.visible);
-    s.shown = -1;
-    s.base.setFrame(state === 'locked' ? 'skillLocked' : (state === 'cool' ? 'skillDim_' : 'skillBase_') + s.kind);
-    if (state !== 'ready') return;
-    s.readyAt = this.clock;
-    this.queueSkillTip(s.kind);
-    if (was === 'cool') PD.Sound.play('skillReady'); // 聲音不受「減少特效」影響；靜音時本來就不響
-    if (was === 'cool' && !reduced) { // 剛冷卻完成：彈一下、光環、星星
-      s.popT = 0.3;
-      s.ringT = 0.4;
-      s.ring.setVisible(true);
-      this.fx.burst('star', s.x, s.y, 0xfff3b0, 6, 130, 0.4, 0.5, 0.1);
-    }
-  }
-
-  tapSkillBar(x, y) {
-    for (let i = 0; i < this.skillSlots.length; i++) {
-      const s = this.skillSlots[i];
-      if (!s.enabled || !PD.hitRect(s.rect, x, y)) continue;
-      PD.Sound.play('tap');
-      if (!this.sim.countUnits(s.kind)) { this.showHint(PD.text.skillNoUnit(PD.names[s.kind]), 4); return true; }
-      const caster = this.sim.skillCaster(s.kind);
-      if (!caster) { this.showHint(PD.text.skillWait, 4); return true; }
-      s.pressT = 0.18;
-      this.sim.command({ type: 'skill', id: caster.id });
-      PD.Sound.play('skill');
-      if (this.spot.kind === 'nudge-' + s.kind) this.hideSpot(); // 放過招，就不用再指給孩子看
-      this.hideRange();
-      this.showHint('');
-      return true;
-    }
-    return false;
-  }
-
   // 新朋友第一次解鎖：進關卡時說一次。已過關重玩、同一次開啟遊戲重試都不再跳；debug.unlockAll 沒有「新解鎖」可言
   queueFriendTips() {
     PD.friendTipSeen = PD.friendTipSeen || new Set();
@@ -382,7 +259,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     if (card) this.showSpot('card-' + kind, card.rect, 'down', PD.text.spotCard, this.cardParts(card));
   }
 
-  // ===== 新招式第一次能用：和新敵人提示同一套畫面，並把左邊那顆圖示亮出來 =====
+  // ===== 新招式第一次能用：和新敵人提示同一套畫面，並把場上那隻發亮的角色亮出來 =====
   // 已過關重玩、同一次開啟遊戲看過、debug.unlockAll 都不再跳（和新朋友提示一樣）
   queueSkillTip(kind) {
     PD.friendTipSeen = PD.friendTipSeen || new Set();
@@ -392,16 +269,45 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     this.skillTipQueue.push(kind);
   }
 
-  // 每一格畫面檢查一次：別的提示或暫停畫面還開著就先等
-  pumpSkillTips() {
-    if (!this.skillTipQueue.length || this.overlay.visible || this.pausedBy || this.sim.state.phase !== 'battle') return;
-    this.showSkillTip(this.skillTipQueue.shift());
+  // 場上這種角色裡，現在已經發亮（可以放招）、畫面也已經畫出來的那一隻；沒有就回傳 null
+  readyUnitOf(kind) {
+    const units = this.sim.state.units;
+    for (let i = 0; i < units.length; i++) {
+      const u = units[i];
+      if (u.kind === kind && !this.sim.skillProblem(u) && this.viewById.get(u.id)) return u;
+    }
+    return null;
   }
 
+  // 每一格畫面檢查一次：別的提示或暫停畫面還開著就先等；場上還沒有發亮的那種角色也先等
+  pumpSkillTips() {
+    if (!this.skillTipQueue.length || this.overlay.visible || this.pausedBy || this.sim.state.phase !== 'battle') return;
+    for (let i = 0; i < this.skillTipQueue.length; i++) {
+      const kind = this.skillTipQueue[i];
+      if (!this.readyUnitOf(kind)) continue;
+      this.skillTipQueue.splice(i, 1);
+      this.showSkillTip(kind);
+      return;
+    }
+  }
+
+  // 箭頭與一句話放在角色旁邊：角色在右半邊就放左邊，不會跑出畫面
+  unitSpotRect(u) {
+    const v = this.viewById.get(u.id);
+    const S = 116;
+    const cy = v.foot - v.h / 2 - 6;
+    return { x: v.c.x - S / 2, y: cy - S / 2, w: S, h: S };
+  }
+
+  unitSpotDir(rect) { return rect.x + rect.w + 360 > this.L.width ? 'right' : 'left'; }
+
   showSkillTip(kind) {
+    const u = this.readyUnitOf(kind);
+    if (!u) { if (this.skillTipQueue.indexOf(kind) < 0) this.skillTipQueue.unshift(kind); return; } // 等有人發亮再說
     this.skillTipKind = kind;
     this.introKind = 'skill-' + kind; // 自動試玩靠 introKind 知道畫面在等人按鈕
-    // 用窄面板：左邊技能欄旁讓出空位，箭頭與「點這裡放招！」不論是第幾個技能槽都不壓到面板
+    // 面板上下挪開：角色在上面兩路，面板放下面；在下面兩路，面板放上面。被指的角色與箭頭都不會被面板擋住
+    const dy = u.lane <= 2 ? 185 : -215;
     this.overlay.show(PD.text.newSkillTitle(PD.names['skill_' + kind]), PD.text.skillDesc[kind], [{ label: PD.text.gotIt, fn: () => {
       PD.friendTipSeen.add(this.modeId + ':skill:' + kind);
       this.skillTipKind = '';
@@ -409,24 +315,29 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
       this.introPic.setVisible(false);
       this.hideSpot();
       this.overlay.hide();
-      const slot = this.skillSlots.find((s) => s.kind === kind);
-      if (slot) this.showSpot('nudge-' + kind, slot.rect, 'left', PD.text.spotSkill, [], 6); // 關掉後再指 6 秒
-    } }], { narrow: true });
+      // 關掉後再指 6 秒（真實時間）；那隻不在了就改指同種另一隻發亮的
+      const t = this.sim.findUnit(u.id) && !this.sim.skillProblem(u) ? u : this.readyUnitOf(kind);
+      if (t) {
+        const r = this.unitSpotRect(t);
+        this.showSpot('nudge-' + kind, r, this.unitSpotDir(r), PD.text.spotSkill, [], 6, t.id);
+      }
+    } }], { dy });
     PD.Sound.play('tip');
-    // 窄面板右邊放一顆大大的招式圖示（在「好耶」鈕右邊；左邊留給指向真正圖示的箭頭）
-    const N = this.L.panelNarrow;
-    const px = N.x + N.w - 90;
+    // 面板右邊放一顆大大的招式圖示（在「好耶」鈕右邊）
+    const px = this.L.width / 2 + 430;
+    const py = 500 + dy;
     if (!this.introPic) this.introPic = PD.img(this, 0, 0, 'skillBase_' + kind).setDepth(501);
-    this.introPic.setFrame('skillBase_' + kind).setVisible(true).setPosition(px, 500).setScale(PD.TEX_SCALE * 1.5);
-    const slot = this.skillSlots.find((s) => s.kind === kind);
-    if (slot) this.showSpot('skill-' + kind, slot.rect, 'left', PD.text.spotSkill, [slot.glow, slot.base, slot.art, slot.lock, slot.secsBg, slot.secs]);
+    this.introPic.setFrame('skillBase_' + kind).setVisible(true).setPosition(px, py).setScale(PD.TEX_SCALE * 1.5);
+    const v = this.viewById.get(u.id);
+    const r = this.unitSpotRect(u);
+    this.showSpot('skill-' + kind, r, this.unitSpotDir(r), PD.text.spotSkill, [v.c, v.top], 0, u.id);
     if (!this.introArt) this.introArt = PD.img(this, 0, 0, 'skillArt_' + kind).setDepth(502);
-    this.introArt.setFrame('skillArt_' + kind).setVisible(true).setPosition(px, 500).setScale(PD.TEX_SCALE * 1.5);
+    this.introArt.setFrame('skillArt_' + kind).setVisible(true).setPosition(px, py).setScale(PD.TEX_SCALE * 1.5);
   }
 
   // ===== 高亮提示：把要看的東西提到暗幕上面，旁邊一個輕輕擺動的箭頭和一句話 =====
   buildSpot() {
-    this.spot = { kind: '', raised: [], rect: null, dir: 'down', until: 0 };
+    this.spot = { kind: '', raised: [], rect: null, dir: 'down', until: 0, unitId: 0 };
     this.spotG = this.add.graphics().setDepth(620).setVisible(false);
     this.spotText = PD.txt(this, 0, 0, '', 26, '#fff3b0', 5).setDepth(621).setVisible(false);
   }
@@ -436,17 +347,21 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
   }
 
   // parts＝要提到暗幕上面的物件（提示關掉時放回原本的深度）；seconds＞0 表示沒有暗幕、幾秒後（真實時間）自己收起來
-  showSpot(kind, rect, dir, label, parts, seconds) {
+  // dir：'down' 箭頭在上面往下指；'left' 箭頭在右邊往左指；'right' 箭頭在左邊往右指。unitId：指的是場上哪一隻（那隻不在了就收起）
+  showSpot(kind, rect, dir, label, parts, seconds, unitId) {
     this.hideSpot();
     this.spot.kind = kind;
     this.spot.rect = rect;
     this.spot.dir = dir;
+    this.spot.unitId = unitId || 0;
     this.spot.until = seconds ? this.clock + seconds : 0;
     this.spot.raised = parts.filter(Boolean).map((o) => [o, o.depth]);
-    this.spot.raised.forEach(([o, d]) => o.setDepth(d + 210));
+    // 卡片（深度約 400）提高 210；場上的角色（深度 100 以下）要提到暗幕（500）上面、箭頭（620）下面
+    this.spot.raised.forEach(([o, d]) => o.setDepth(d + (d < 300 ? 490 : 210)));
     const t = this.spotText.setText(label).setVisible(true);
-    if (dir === 'down') t.setPosition(rect.x + rect.w / 2, rect.y - 70);
-    else t.setPosition(rect.x + rect.w + 150, rect.y + rect.h / 2);
+    if (dir === 'down') t.setOrigin(0.5).setPosition(rect.x + rect.w / 2, rect.y - 70);
+    else if (dir === 'right') t.setOrigin(1, 0.5).setPosition(rect.x - 70, rect.y + rect.h / 2);
+    else t.setOrigin(0, 0.5).setPosition(rect.x + rect.w + 70, rect.y + rect.h / 2);
     this.spotG.setVisible(true);
   }
 
@@ -456,6 +371,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     this.spot.raised.forEach(([o, d]) => o.setDepth(d));
     this.spot.raised = [];
     this.spot.kind = '';
+    this.spot.unitId = 0;
     this.spotG.clear().setVisible(false);
     this.spotText.setVisible(false);
   }
@@ -465,6 +381,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     const sp = this.spot;
     if (!sp.kind) return;
     if (sp.until && this.clock >= sp.until) { this.hideSpot(); return; }
+    if (sp.unitId && !this.sim.findUnit(sp.unitId)) { this.hideSpot(); return; } // 指的那隻被請回或去休息了
     const g = this.spotG.clear();
     const r = sp.rect;
     const still = this.fx.reduced;
@@ -473,6 +390,9 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     if (sp.dir === 'down') {
       g.strokeRoundedRect(r.x - 4, r.y - 4, r.w + 8, r.h + 8, 16);
       this.arrow(g, r.x + r.w / 2, r.y - 10 + bob, 0, 1);
+    } else if (sp.dir === 'right') {
+      g.strokeCircle(r.x + r.w / 2, r.y + r.h / 2, r.w / 2 + 1);
+      this.arrow(g, r.x - 6 + bob, r.y + r.h / 2, 1, 0);
     } else {
       g.strokeCircle(r.x + r.w / 2, r.y + r.h / 2, r.w / 2 + 1);
       this.arrow(g, r.x + r.w + 6 - bob, r.y + r.h / 2, -1, 0);
@@ -543,8 +463,19 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
       const burn = PD.img(this, 0, 0, 'iconBurn');
       const slow = PD.img(this, 0, 0, 'iconSlow');
       const flames = FLAME_SPOTS.map(() => PD.img(this, 0, 0, 'iconBurn').setOrigin(0.5, 1).setVisible(false));
-      c.add([ready, shadow, body, label, ...flames, hpBack, hpFill, burn, slow]);
-      v = { c, ready, shadow, body, label, flames, hpBack, hpFill, burn, slow, kindClass: 'actor', ...PD.Anim.newSlots() };
+      // 招式可以放時腳下一圈往外擴的光環（只有我方有技能的角色用）
+      const skFoot = this.add.image(0, -2, 'atlas', 'ring').setBlendMode(Phaser.BlendModes.ADD).setVisible(false);
+      c.add([ready, skFoot, shadow, body, label, ...flames, hpBack, hpFill, burn, slow]);
+      // 角色頭右上角的小招式圖示＋冷卻倒數圓環：另一層，畫在同路敵人上面，不會被走過來的敵人蓋住
+      const top = this.add.container(0, 0).setDepth(95).setVisible(false);
+      const skGlow = this.add.image(0, 0, 'atlas', 'glow').setBlendMode(Phaser.BlendModes.ADD);
+      const skBase = PD.img(this, 0, 0, 'white');
+      const skArt = PD.img(this, 0, 0, 'white');
+      const skRing = this.add.graphics();
+      const skSecs = PD.txt(this, 0, 0, '', 17, '#ffffff', 4);
+      top.add([skGlow, skBase, skArt, skRing, skSecs]);
+      v = { c, ready, shadow, body, label, flames, hpBack, hpFill, burn, slow, kindClass: 'actor',
+        skFoot, top, skGlow, skBase, skArt, skRing, skSecs, ...PD.Anim.newSlots() };
     }
     v.shadowSX = PD.TEX_SCALE * (size.w * 1.15) / 96;
     v.shadow.setScale(v.shadowSX, PD.TEX_SCALE * 0.9);
@@ -560,7 +491,10 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
       baseFrame: frame, idleFrames: 0, idleMs: 0, idleT: 0, idleShown: -1,
       skillT: -1, skillKeys: null, readyOn: false, frenzyOn: false, slideT: 0, slideDx: 0, hopT: 0, hopDx: 0,
       hover: 0, hpWide: 1, hpTall: 1, cloakOn: false, aura: 0, shimmerT: 0,
+      skState: '', skStep: -1, skShown: -1, skReadyAt: 0, skPop: 0, iconX: 0, iconY: 0,
     });
+    v.skFoot.setVisible(false);
+    v.top.setVisible(false);
     v.ready.setVisible(false).setTint(0xffe9a0).setScale(PD.TEX_SCALE * (size.w / 48), PD.TEX_SCALE * 0.5);
     v.shadow.x = 0;
     v.body.setFrame(frame).clearTint().setScale(PD.TEX_SCALE).setPosition(0, 0).setRotation(0).setAlpha(1);
@@ -597,6 +531,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     this.viewById.delete(v.id);
     v.active = false;
     v.c.setVisible(false);
+    if (v.top) v.top.setVisible(false);
     (v.kindClass === 'orb' ? this.orbPool : this.actorPool).push(v);
   }
 
@@ -631,7 +566,6 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     }
     this.syncViews(this.accum / this.cfg.rules.tickSeconds);
     this.updateHud(dt);
-    this.updateSkillBar(dt);
     this.refreshActionBtns();
     this.pumpSkillTips();
     this.updateSpot();
@@ -657,6 +591,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     switch (ev.type) {
       case 'skill':
         this.skillFx.cast(ev);
+        if (this.spot.kind === 'nudge-' + ev.kind) this.hideSpot(); // 放過招，就不用再指給孩子看
         if (ev.kind === 'trainer') this.skillOrbFloat = true;
         break;
       case 'comet': this.skillFx.comet(ev); break;
@@ -780,7 +715,6 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
         this.restoring = true;
         this.overlay.hide();
         this.exitRecall();
-        this.skillSlots.forEach((slot) => { slot.state = ''; slot.popT = 0; slot.pressT = 0; slot.ringT = 0; slot.ring.setVisible(false); }); // 還原後不算「剛冷卻完成」
         this.skillFx.clear();
         this.setSelected(null);
         this.accum = 0;
@@ -906,6 +840,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
       v.c.rotation = Math.sin(v.dying * 18) * 0.15;
       v.c.y -= 42 * this.frameDt;
       v.c.alpha = Math.max(0, v.dying / 0.6);
+      v.top.setVisible(false);
       if (v.dying > 0) return false;
       this.releaseView(index);
       return true;
@@ -945,17 +880,88 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     this.updateReady(v, u);
   }
 
-  // 技能冷卻好了：腳下一圈柔光，並輕輕跳一下
+  // 每隻角色自己的招式狀態：
+  // 可以放＝頭右上角的亮色招式圖示（後面柔光、輕輕上下擺）＋腳下一圈往外擴的光環；
+  // 冷卻中＝灰色圖示＋順時針長滿的倒數圓環（自己挑戰在圖示中間寫剩幾秒，倒數到 0 就收起，不會出現負數）。
+  // 「減少特效」時光環與圖示不擺動、不呼吸，但兩種狀態仍然一眼看得出差別
   updateReady(v, u) {
-    if (!this.cfg.skills[u.kind]) return;
-    const ready = this.sim.state.phase === 'battle' && this.sim.skillReadyAt(u.kind) <= this.sim.state.tick;
-    if (ready && !v.readyOn) {
-      v.land = 0.2;
-      if (!this.skillHinted) { this.skillHinted = true; this.showHint(PD.text.skillReady, 6); }
+    const sk = this.cfg.skills[u.kind];
+    if (!sk) return;
+    const sim = this.sim;
+    const reduced = this.fx.reduced;
+    const left = sim.skillLeft(u);
+    const state = left <= 0 && sim.state.phase === 'battle' ? 'ready' : 'cool';
+    if (state !== v.skState) {
+      const was = v.skState;
+      v.skState = state;
+      v.skStep = -1;
+      v.skShown = -1;
+      v.iconX = Math.min(v.w / 2 + 4, 36);
+      v.iconY = -v.h + 14;
+      v.top.setVisible(true);
+      const ready = state === 'ready';
+      v.skBase.setFrame((ready ? 'skillBase_' : 'skillDim_') + u.kind).setPosition(v.iconX, v.iconY);
+      v.skArt.setFrame('skillArt_' + u.kind).setPosition(v.iconX, v.iconY).setTint(ready ? 0xffffff : 0xbfc6cf).setVisible(true);
+      v.skGlow.setTint(parseInt(sk.bar[1].slice(1), 16)).setPosition(v.iconX, v.iconY).setVisible(ready);
+      v.skSecs.setPosition(v.iconX, v.iconY).setVisible(false);
+      v.skRing.clear();
+      v.skFoot.setTint(parseInt(sk.bar[0].slice(1), 16)).setVisible(ready);
+      v.ready.setVisible(ready);
+      if (ready) {
+        v.skReadyAt = this.clock;
+        this.queueSkillTip(u.kind);
+        if (was === 'cool') { // 剛冷卻完成（還原或剛畫出來時不算）：輕跳一下、叮一聲、小星星
+          v.land = 0.2;
+          PD.Sound.play('skillReady'); // 聲音不受「減少特效」影響；靜音時本來就不響
+          if (!reduced) { v.skPop = 0.3; this.fx.burst('star', v.c.x + v.iconX, v.c.y + v.iconY, 0xfff3b0, 6, 130, 0.4, 0.5, 0.1); }
+          if (!this.skillHinted) { this.skillHinted = true; this.showHint(PD.text.skillReady, 6); }
+        }
+      }
     }
-    v.readyOn = ready;
-    v.ready.setVisible(ready);
-    if (ready) v.ready.setAlpha(0.55 + Math.sin(this.clock * 4) * 0.25);
+    v.top.setPosition(v.c.x, v.c.y);
+    const S = PD.TEX_SCALE * 0.42; // 圖示畫面直徑約 32
+    if (state === 'ready') {
+      v.skPop = Math.max(0, v.skPop - this.frameDt);
+      const pop = v.skPop > 0 ? 1 + 0.3 * Math.sin(Math.PI * (1 - v.skPop / 0.3)) : 1;
+      const bob = reduced ? 0 : Math.sin((this.clock - v.skReadyAt) * Math.PI * 2 / 1.2) * 3;
+      const k = S * 1.12 * pop;
+      v.skBase.setScale(k).setY(v.iconY + bob);
+      v.skArt.setScale(k).setY(v.iconY + bob);
+      v.skGlow.setY(v.iconY + bob).setScale(PD.TEX_SCALE * 0.75).setAlpha(reduced ? 0.85 : 0.7 + 0.3 * Math.sin(this.clock * Math.PI * 2 / 1.2));
+      v.ready.setAlpha(reduced ? 0.7 : 0.6 + Math.sin(this.clock * 4) * 0.25);
+      // 腳下光環：每 1.2 秒從腳邊往外擴一圈再淡掉（真實時間）；減少特效時固定一圈
+      const fw = PD.TEX_SCALE * (v.w * 1.25) / 96;
+      if (reduced) v.skFoot.setScale(fw, fw * 0.32).setAlpha(0.85);
+      else {
+        const p = ((this.clock - v.skReadyAt) % 1.2) / 1.2;
+        v.skFoot.setScale(fw * (0.75 + 0.5 * p), fw * 0.32 * (0.75 + 0.5 * p)).setAlpha(0.95 * (1 - p));
+      }
+      return;
+    }
+    v.skBase.setScale(S).setY(v.iconY);
+    v.skArt.setScale(S).setY(v.iconY);
+    const step = Math.round((1 - left) * 60); // 倒數圓環只在角度變了才重畫
+    if (step !== v.skStep) {
+      v.skStep = step;
+      const end = -Math.PI / 2 + step / 60 * Math.PI * 2; // 從 12 點鐘順時針長滿＝已恢復的部分
+      const g = v.skRing.clear();
+      g.lineStyle(5, 0x1d2a3a, 0.75).strokeCircle(v.iconX, v.iconY, 18);
+      if (step > 0) {
+        g.lineStyle(3.5, 0xffffff, 1);
+        g.beginPath();
+        g.arc(v.iconX, v.iconY, 18, -Math.PI / 2, end, false);
+        g.strokePath();
+      }
+    }
+    if (sim.mode.showSkillSeconds) {
+      // 夾在 0 以上：開戰前／過關後冷卻停住時，tick 可能已超過 skillAt，不可顯示負數
+      const n = Math.max(0, Math.ceil(((u.skillAt || 0) - sim.state.tick) / sim.tps));
+      if (n !== v.skShown) {
+        v.skShown = n;
+        v.skSecs.setText(String(n)).setVisible(n > 0);
+        v.skArt.setVisible(n <= 0); // 有數字時數字放在灰色圖示中間，蓋住圖案比較好讀
+      }
+    }
   }
 
   // 「+75」從能量計數器旁飄起來
@@ -1433,7 +1439,6 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
       return;
     }
     if (this.overlay.visible) { this.overlay.tap(x, y); return; }
-    if (this.tapSkillBar(x, y)) return;
     if (this.tapOrb(x, y)) return;
     const L = this.L;
     for (let i = 0; i < this.pressables.length; i++) {
@@ -1491,18 +1496,57 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     this.setSelected(card.kind);
   }
 
+  // 點擊範圍：角色所在那一整格（96×144），再加上以角色身體為中心、邊長 unitTapSize 的正方形；
+  // 兩隻的範圍都碰到時取比較近的那隻。正方形在格子裡面，不會搶走旁邊空格（已選卡片時照樣可以放）
+  unitTapRect(u) {
+    const v = this.viewById.get(u.id);
+    const S = this.L.unitTapSize;
+    const def = this.cfg.units[u.kind];
+    const cy = this.footY(u.lane) - (v ? v.h : def.size.h) / 2;
+    return { x: this.ruleToX(u.col) - S / 2, y: cy - S / 2, w: S, h: S };
+  }
+
+  unitAtPoint(x, y, lane, col) {
+    const inCell = lane ? this.sim.unitAt(lane, col) : null;
+    if (inCell) return inCell;
+    let best = null;
+    let bestD = Infinity;
+    const units = this.sim.state.units;
+    for (let i = 0; i < units.length; i++) {
+      const r = this.unitTapRect(units[i]);
+      if (!PD.hitRect(r, x, y)) continue;
+      const d = Math.abs(r.x + r.w / 2 - x) + Math.abs(r.y + r.h / 2 - y);
+      if (d < bestD) { best = units[i]; bestD = d; }
+    }
+    return best;
+  }
+
+  // 沒選卡片、也不在請回時點到發亮的角色：從那一隻放招
+  castFrom(u) {
+    this.sim.command({ type: 'skill', id: u.id });
+    PD.Sound.play('skill');
+    const v = this.viewById.get(u.id);
+    if (v && !this.fx.reduced) v.land = Math.max(v.land, 0.15);
+    this.hideRange();
+    this.showHint('');
+  }
+
   tapGrid(x, y) {
     const G = this.L.grid;
     if (x < G.x || x >= G.x + G.cols * G.cellW || y < G.y || y >= G.y + G.rows * G.cellH) return;
     const col = Math.floor((x - G.x) / G.cellW) + 1;
     const lane = Math.floor((y - G.y) / G.cellH) + 1;
     if (!this.sim.isLaneOpen(lane)) { this.showHint(PD.text.restLane); return; }
-    const occupant = this.sim.unitAt(lane, col);
+    // 已選卡片時只看這一格有沒有人，點空格就放；沒選卡片時才用比較大的角色點擊範圍
+    const occupant = this.selected ? this.sim.unitAt(lane, col) : this.unitAtPoint(x, y, lane, col);
     if (this.recalling) { this.tapRecallCell(occupant); return; }
     if (occupant) {
-      if (this.selected) { this.showHint(PD.text.occupied); return; }
+      if (this.selected) { this.showHint(PD.text.occupied); return; } // 已選卡片：就算那隻發亮也不放招
+      const problem = this.sim.skillProblem(occupant);
+      if (!problem) { this.castFrom(occupant); return; }
       const def = this.cfg.units[occupant.kind];
-      if (def.range) this.showRange(lane, col, def.range, 2);
+      if (def.range) this.showRange(occupant.lane, occupant.col, def.range, 2);
+      if (problem === 'cooldown') this.showHint(PD.text.skillWait, 3); // 冷卻中誤點：不放招，告訴孩子要等一下
       return;
     }
     if (!this.selected) { this.showHint(PD.text.pickCardFirst); return; }
