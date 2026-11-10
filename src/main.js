@@ -11,8 +11,9 @@ PD.BootScene = class BootScene extends Phaser.Scene {
 
   // 本機貼圖（我方與敵人）：不存在的檔案載入失敗就略過，該角色自動用色塊
   preload() {
-    // 用 artFrom 重新上色的敵人沒有自己的檔案，不用載入
-    [...PD.config.cardOrder.filter((k) => !PD.config.units[k].noArt), ...Object.keys(PD.config.enemies).filter((k) => !PD.config.enemies[k].artFrom)]
+    // 用 artFrom 重新上色的敵人、標了 noArt 的（例如厚殼機器人）沒有自己的檔案，不用載入
+    const E = PD.config.enemies;
+    [...PD.config.cardOrder.filter((k) => !PD.config.units[k].noArt), ...Object.keys(E).filter((k) => !E[k].artFrom && !E[k].noArt)]
       .forEach((k) => this.load.image('art_' + k, 'assets/local-art/' + k + '.png'));
     // 敵人的專屬貼圖（頭目 boss.png）：缺檔時載入失敗就略過，退回重新上色的圖
     const own = new Set(Object.values(PD.config.enemies).filter((d) => d.art).map((d) => d.art.file));

@@ -206,12 +206,13 @@ window.PD = window.PD || {};
     },
     // 穿透波紋：同一條路前方所有敵人各打 1。range 10 表示從任何一欄都能打到出怪點
     pierceShooter: {
-      // 卡片用 v2 特寫（擁有者 2026-11-10 要求）；場上的角色仍是程式畫的造型（noArt）
+      // 卡片用 v2 特寫、場上用 pierceShooter.png（擁有者宇鋒 2026-11-10 要求接上，只限本機，見 CLAUDE.md）。
+      // artBox＝只取原圖（200×256）有畫的那一塊（內容在 x 1～140、y 64～240），左邊多留 6 透明邊，尾巴不會被切掉；
+      // 缺檔時退回程式畫的造型
       cardArt: { x: 160, y: 60, w: 320, h: 262 },
+      artBox: { x: -6, y: 58, w: 152, h: 186 },
       cost: 175, hp: 6, range: 10, interval: 2, damage: 1, pierce: true, fx: 'crystal',
-      size: { w: 68, h: 100 }, color: 0x7fb8ea, light: 0xe2f3ff, icon: 'gem',
-      // noArt＝不載入 assets/local-art 的貼圖，用程式畫的造型（現有貼圖太接近官方角色，見 CLAUDE.md 2.5 節）
-      noArt: true,
+      size: { w: 72, h: 100 }, color: 0x7fb8ea, light: 0xe2f3ff, icon: 'gem',
     },
   };
   // ===== 解鎖表：第幾關新加入哪些朋友（改這裡就好；第 4～6 關做好時不用再動）=====
@@ -243,7 +244,8 @@ window.PD = window.PD || {};
     scout: { hp: 4, secPerCell: 8, size: { w: 62, h: 94 }, color: 0x9aa3b5, light: 0xe6eaf2, shape: 'robot' },
     tough: { hp: 6, secPerCell: 8, size: { w: 62, h: 94 }, color: 0x8a5cc0, light: 0xe0ccf5, shape: 'stripe' },
     runner: { hp: 6, secPerCell: 5, size: { w: 62, h: 94 }, color: 0xe88fb0, light: 0xfde0ea, shape: 'swift' },
-    armored: { hp: 12, secPerCell: 10, size: { w: 72, h: 108 }, color: 0x6c7484, light: 0xc2c9d6, shape: 'plated', accessory: 'pads' },
+    // noArt＝沒有專屬貼圖，不去載入（以前會多要一次不存在的 armored.png、出現 404），直接用程式畫的色塊
+    armored: { hp: 12, secPerCell: 10, size: { w: 72, h: 108 }, color: 0x6c7484, light: 0xc2c9d6, shape: 'plated', accessory: 'pads', noArt: true },
     // artFrom＝用哪張已公開貼圖重新上色（程式即時畫，不產生新圖檔），recolor＝上色的顏色，outline＝描邊色。缺貼圖時退回 shape 色塊
     // batch2 專屬貼圖（2026-11-10 擁有者要求接入；assets/local-art/<file>.png，面朝左）：art 的用法和頭目一樣（box＝取哪一塊，
     // 左右以腳底中心對稱、含整隻不裁切；size＝有貼圖時的畫面大小）。圖上已有十字、彈簧、肩甲，不再加程式配件。
@@ -340,14 +342,15 @@ window.PD = window.PD || {};
         skyOrbEvery: 18,
         genEvery: 18,
         killOrbEvery: 3,
-        enemies: { scout: { secPerCell: 3.25, hp: 5 } },
+        // 2026-11-10 宇鋒要求稍加壓：小兵 5→6 血、終局波每 0.33→0.32 秒一隻（合理玩家終局波要掉一點命，仍是教學關）
+        enemies: { scout: { secPerCell: 3.25, hp: 6 } },
       },
       script: makeScript([
         { at: 18, gap: 6, kinds: many('scout', 4) },
         { at: 54, gap: 5, kinds: many('scout', 5) },
         { at: 88, gap: 3.5, kinds: many('scout', 7) },
         { at: 124, gap: 2.5, kinds: many('scout', 10) },
-        { at: 162, gap: 0.33, kinds: many('scout', 66) }, // 終局波
+        { at: 162, gap: 0.32, kinds: many('scout', 66) }, // 終局波
       ]),
     },
     {
@@ -394,6 +397,7 @@ window.PD = window.PD || {};
           scout: { secPerCell: 3.25, hp: 5 },
           tough: { secPerCell: 3.25, hp: 8 },
           runner: { secPerCell: 2, hp: 5 },
+          bruiser: { hp: 20 }, // 2026-11-10：24→20，貪婪亂放的玩家輸太多（合理玩家不受影響）
         },
       },
       script: makeScript([
@@ -475,7 +479,14 @@ window.PD = window.PD || {};
         spawn: ['#6B3F7A', '#3E2450'], spawnMist: 'rgba(255,200,230,0.12)', pennants: ['#FF8E6E', '#FFE082'],
         warm: '255,244,200', warmAlpha: 0.2, flower: 'flower', flowerChance: 0.3, decor: 'tent',
       },
-      tune: { skyOrbEvery: 12, genEvery: 12, killOrbEvery: 2, enemies: LATE_ENEMIES },
+      // 2026-11-10 宇鋒要求：收緊經濟（貪婪玩家不再鋪滿）、合理玩家自己挑戰約 60～80%。
+      // 擊倒每 3 隻才掉球（原 2）；隊長 80→60 血、鼓鼓隊長 260→180 血。
+      // 一起守護敵人走得慢、整局較長，收入另外拉長（天空與小勇 13 秒、每 4 隻掉球），不然貪婪玩家一樣會鋪滿
+      tune: {
+        skyOrbEvery: 12, genEvery: 12, killOrbEvery: 3,
+        enemies: Object.assign({}, LATE_ENEMIES, { boss: { hp: 60 }, finalBoss: { hp: 180 } }),
+        byMode: { together: { skyOrbEvery: 13, genEvery: 13, killOrbEvery: 4 } },
+      },
       script: makeScript([
         { at: 16, gap: 4.5, kinds: ['tough', 'flyer', 'scout', 'phantom', 'tough'] },
         { at: 46, gap: 4.2, kinds: ['armored', 'lobber', 'tough', 'flyer', 'splitter', 'phantom'] },

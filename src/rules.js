@@ -9,7 +9,9 @@ PD.BattleSim = class BattleSim {
     this.level = config.levels[levelIndex];
     this.mode = config.modes[modeId];
     // 關卡專屬的數值調整（沒寫的項目沿用共通設定），不改動共通的角色與敵人表
-    this.tune = this.level.tune || {};
+    // byMode＝只在某個模式另外覆蓋的項目（例如一起守護敵人走得慢、整局較長，收入間隔另外拉長）
+    const tune = this.level.tune || {};
+    this.tune = Object.assign({}, tune, (tune.byMode || {})[modeId]);
     this.enemyDefs = {};
     Object.keys(config.enemies).forEach((k) => {
       this.enemyDefs[k] = Object.assign({}, config.enemies[k], (this.tune.enemies || {})[k]);
