@@ -287,13 +287,13 @@ window.PD = window.PD || {};
   // ===== 主動技能（毛毛設計 docs/active-skills-v1.md；建議值，尚未實測）=====
   // cd＝冷卻秒數；一起守護（5 歲）再乘 modes.together.skillCdMul；bar＝圖示底色（中心→邊緣，docs/skill-icons-v1.md）
   const skills = {
-    trainer: { cd: 70, orbs: 2, bar: ['#FFE082', '#F9A825'] },
-    basicShooter: { cd: 30, seconds: 5, rate: 3, bar: ['#FFF176', '#FBC02D'] },
-    burnShooter: { cd: 45, seconds: 6, cells: 3, burnSeconds: 3, bar: ['#FF8A50', '#E64A19'] },
-    slowShooter: { cd: 55, push: 1, damage: 1, slowSeconds: 4, slowFactor: 0.5, bar: ['#81D4FA', '#0277BD'] },
-    doubleStriker: { cd: 40, reach: 1.5, rootSeconds: 3, damage: 4, bar: ['#A5D6A7', '#2E7D32'] },
-    tank: { cd: 60, heal: 0.5, reach: 1.5, damage: 3, push: 1, stunSeconds: 2, bar: ['#BCAAA4', '#5D4037'] },
-    pierceShooter: { cd: 90, damage: 3, chargeSeconds: 0.4, bar: ['#B3E5FC', '#5C6BC0'] },
+    trainer: { cd: 64, orbs: 2, bar: ['#FFE082', '#F9A825'] },
+    basicShooter: { cd: 27, seconds: 5, rate: 3, bar: ['#FFF176', '#FBC02D'] },
+    burnShooter: { cd: 40, seconds: 6, cells: 3, burnSeconds: 3, bar: ['#FF8A50', '#E64A19'] },
+    slowShooter: { cd: 50, push: 1, damage: 1, slowSeconds: 4, slowFactor: 0.5, bar: ['#81D4FA', '#0277BD'] },
+    doubleStriker: { cd: 36, reach: 1.5, rootSeconds: 3, damage: 4, bar: ['#A5D6A7', '#2E7D32'] },
+    tank: { cd: 54, heal: 0.5, reach: 1.5, damage: 3, push: 1, stunSeconds: 2, bar: ['#BCAAA4', '#5D4037'] },
+    pierceShooter: { cd: 80, damage: 3, chargeSeconds: 0.4, bar: ['#B3E5FC', '#5C6BC0'] },
   };
 
   // ===== 敵人 =====
@@ -562,8 +562,8 @@ window.PD = window.PD || {};
 
   const modes = {
     // 宇鋒 2026-11-08 要求稍難（原本 0.75 倍、5 次），理由與試玩數據見 CLAUDE.md
-    // skillCdMul：5 歲模式技能冷卻短 20%（active-skills-v1）；「5 歲模式」對應「一起守護」
-    together: { speedMul: 0.75, rescues: 3, autoWaveHint: true, skillCdMul: 0.8, showSkillSeconds: false },
+    // skillCdMul：技能冷卻倍率；一起守護 1.1（比自己挑戰長 10%，敵人已較慢；2026-11-10 第二輪平衡，原 0.8）；「5 歲模式」對應「一起守護」
+    together: { speedMul: 0.75, rescues: 3, autoWaveHint: true, skillCdMul: 1.1, showSkillSeconds: false },
     solo: { speedMul: 1, rescues: 3, autoWaveHint: false, skillCdMul: 1, showSkillSeconds: true },
   };
 
