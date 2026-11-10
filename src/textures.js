@@ -58,13 +58,16 @@ PD.TEX_SCALE = 1 / PD.RES;
     ctx.drawImage(src, (w - dw) / 2, h - dh, dw, dh);
   }
 
-  // 依角色的 artBox 只取來源圖的一塊（可超出原圖，多的地方是透明邊距）
-  function cropArt(img, box) {
+  // 依角色的 artBox 只取來源圖的一塊（可超出原圖，多的地方是透明邊距）。
+  // cut＝原圖 x 小於這個值的像素丟掉（小搗蛋只取雙胞搗蛋圖右邊那一隻，左邊那隻的尾巴不能跑進來）
+  function cropArt(img, box, cut) {
     if (!box) return img;
     const cv = document.createElement('canvas');
     cv.width = box.w;
     cv.height = box.h;
-    cv.getContext('2d').drawImage(img, -box.x, -box.y);
+    const c = cv.getContext('2d');
+    c.drawImage(img, -box.x, -box.y);
+    if (cut > box.x) c.clearRect(0, 0, cut - box.x, box.h);
     return cv;
   }
 
@@ -305,64 +308,6 @@ PD.TEX_SCALE = 1 / PD.RES;
           c.restore();
         });
         c.restore();
-      },
-    },
-    wings: {
-      back(c, w, h) {
-        [[w * 0.6, -0.55], [w * 0.42, 0.45]].forEach(([x, tilt], i) => {
-          c.save();
-          c.translate(x, h * 0.66);
-          c.rotate(tilt);
-          c.beginPath();
-          c.moveTo(0, 0);
-          c.quadraticCurveTo(-w * 0.06, -h * 0.62, w * 0.22 * (i ? -1 : 1), -h * 0.5);
-          c.quadraticCurveTo(w * 0.18 * (i ? -1 : 1), -h * 0.14, 0, 0);
-          c.fillStyle = i ? '#cfe2ff' : '#eef5ff';
-          c.fill();
-          c.lineWidth = 2.5; c.strokeStyle = OUTLINE; c.stroke();
-          c.strokeStyle = 'rgba(80,120,200,0.55)'; c.lineWidth = 1.5;
-          c.beginPath(); c.moveTo(0, 0); c.lineTo(w * 0.13 * (i ? -1 : 1), -h * 0.42); c.stroke();
-          c.restore();
-        });
-      },
-    },
-    hat: {
-      back(c, w, h) {
-        // 背後一顆要丟的軟軟球
-        c.beginPath(); c.arc(w * 0.82, h * 0.52, w * 0.13, 0, 7);
-        c.fillStyle = '#ffe36b'; c.fill(); c.lineWidth = 2; c.strokeStyle = OUTLINE; c.stroke();
-        c.fillStyle = 'rgba(255,255,255,0.7)';
-        c.beginPath(); c.arc(w * 0.78, h * 0.49, w * 0.04, 0, 7); c.fill();
-      },
-      front(c, w, h) {
-        // 歪歪的小帽子加絨球
-        c.save();
-        c.translate(w * 0.46, h * 0.4);
-        c.rotate(-0.25);
-        poly(c, [[-w * 0.26, 0], [w * 0.22, -h * 0.02], [w * 0.02, -h * 0.2]]);
-        c.fillStyle = '#e84a5f'; c.fill(); c.lineWidth = 2.5; c.strokeStyle = OUTLINE; c.stroke();
-        c.fillStyle = '#fff4d6';
-        rr(c, -w * 0.29, -h * 0.025, w * 0.54, h * 0.05, 4); c.fill(); c.stroke();
-        c.beginPath(); c.arc(w * 0.02, -h * 0.2, w * 0.07, 0, 7); c.fill(); c.stroke();
-        c.restore();
-      },
-    },
-    mask: {
-      back(c, w, h) {
-        // 小斗篷
-        poly(c, [[w * 0.25, h * 0.3], [w * 0.75, h * 0.3], [w * 0.95, h * 0.95], [w * 0.05, h * 0.95]]);
-        c.fillStyle = '#3b3380'; c.fill(); c.lineWidth = 2.5; c.strokeStyle = OUTLINE; c.stroke();
-      },
-      front(c, w, h) {
-        // 眼罩（兩個圓洞），像玩躲貓貓
-        const y = h * 0.2;
-        c.beginPath();
-        c.ellipse(w * 0.5, y, w * 0.34, h * 0.055, 0, 0, 7);
-        c.fillStyle = '#2a2470'; c.fill(); c.lineWidth = 2; c.strokeStyle = OUTLINE; c.stroke();
-        c.fillStyle = '#ffffff';
-        [0.37, 0.61].forEach((k) => { c.beginPath(); c.ellipse(w * k, y, w * 0.065, h * 0.03, 0, 0, 7); c.fill(); });
-        c.fillStyle = 'rgba(200,190,255,0.9)';
-        c.beginPath(); c.ellipse(w * 0.8, y - h * 0.03, w * 0.08, h * 0.02, 0.4, 0, 7); c.fill();
       },
     },
     captain: {
@@ -771,9 +716,10 @@ PD.TEX_SCALE = 1 / PD.RES;
     const w = d.size.w;
     const h = d.size.h;
     const ratio = (img, bw, bh) => Math.max(img.width / bw, img.height / bh);
-    // 頭目等專屬貼圖：整隻取進來（box 已含整隻），腳底對齊下緣；圖上已有帽子、斗篷和鼓，不再加程式配件
+    // 頭目與 batch3 等專屬貼圖：整隻取進來（box 已含整隻、下緣切在腳底錨點、左右以錨點為中心），
+    // 腳底對齊下緣；圖上已有帽子、斗篷、肩甲、十字、彈簧，不再加程式配件
     if (d.ownArt) {
-      const own = cropArt(scene.textures.get('art_' + d.art.file).getSourceImage(), d.art.box);
+      const own = cropArt(scene.textures.get('art_' + d.art.file).getSourceImage(), d.art.box, d.art.cut);
       return {
         w, h, src: ratio(own, w - (d.art.recolor ? 6 : 0), h - (d.art.recolor ? 6 : 0)), direct: d.art.recolor ? null : own,
         draw: (c, dens) => (d.art.recolor ? drawRecolored(c, w, h, own, d.art, true, dens) : drawArt(c, w, h, own, dens)),
@@ -802,8 +748,9 @@ PD.TEX_SCALE = 1 / PD.RES;
 
   // 圖鑑放大圖用的高解析圖（不放進場上大圖，第一次打開時才做，之後重複使用）。回傳 { key, frame }。
   //   好朋友：完整的 512×512 卡片圖 card-<代號>.png；缺檔才退回場上小圖。
-  //   搗蛋團：原圖就等於場上那張（小兵、紫紋蛇、跑腿貓、鼓鼓隊長）時直接用原圖（有 box 的取同一塊）；
-  //   要重新上色或加配件的（鐵鎚隊長、借圖上色的、厚殼機器人色塊）用場上同一套畫法，
+  //   搗蛋團：有 batch3 圖鑑大圖（art.book，864×1152，BestiaryScene 打開時才載入成 book_<代號>）的直接用大圖，不裁切；
+  //   原圖就等於場上那張（小兵、紫紋蛇、跑腿貓、鼓鼓隊長）時直接用原圖（有 box 的取同一塊）；
+  //   要重新上色或加配件的（鐵鎚隊長、缺圖退回時的借圖上色與色塊）用場上同一套畫法，
   //   以「原圖完整像素」與「填滿放大框 maxW×maxH×PD.RES」兩者較高的密度重畫。
   PD.bestiaryPic = function (scene, field, kind, maxW = 270, maxH = 390) {
     const T = scene.textures;
@@ -811,9 +758,10 @@ PD.TEX_SCALE = 1 / PD.RES;
     if (field === 'friends') {
       return T.exists('cardArt_' + kind) ? linear('cardArt_' + kind) : { key: 'atlas', frame: 'unit_' + kind };
     }
+    const d = PD.config.enemies[kind];
+    if (d.art && d.art.book && T.exists('book_' + kind)) return linear('book_' + kind);
     const key = 'bigPic_' + kind;
     if (T.exists(key)) return { key, frame: undefined };
-    const d = PD.config.enemies[kind];
     const p = enemyPainter(scene, d, kind);
     if (p.direct && p.direct.width) {
       if (p.direct.tagName === 'CANVAS') T.addCanvas(key, p.direct); else T.addImage(key, p.direct);
@@ -837,12 +785,21 @@ PD.TEX_SCALE = 1 / PD.RES;
     canvas.height = ATLAS;
     const ctx = canvas.getContext('2d');
     const frames = [];
-    let x = PAD, y = PAD, rowH = 0;
-    // 由高排到矮，大圖上的空隙最少
+    // 由高排到矮、一排一排放；每張圖先找前面還有剩寬度的排（排高一定夠，因為越後面越矮），
+    // 都放不下才開新的一排。這樣每排右邊剩下的空位會被小圖補滿，2 倍解析度也放得下
+    const shelves = [];
     frameList(cfg, scene).sort((a, b) => b.h - a.h).forEach((f) => {
       const pw = Math.ceil(f.w * DENSITY);
       const ph = Math.ceil(f.h * DENSITY);
-      if (x + pw + PAD > ATLAS) { x = PAD; y += rowH + PAD; rowH = 0; }
+      let shelf = shelves.find((s) => s.x + pw + PAD <= ATLAS);
+      if (!shelf) {
+        const last = shelves[shelves.length - 1];
+        shelf = { x: PAD, y: last ? last.y + last.h + PAD : PAD, h: ph };
+        shelves.push(shelf);
+      }
+      const x = shelf.x;
+      const y = shelf.y;
+      shelf.x += pw + PAD;
       if (y + ph + PAD > ATLAS) console.error('貼圖大圖放不下：' + f.name);
       ctx.save();
       ctx.translate(x, y);
@@ -852,8 +809,6 @@ PD.TEX_SCALE = 1 / PD.RES;
       f.draw(ctx);
       ctx.restore();
       frames.push({ name: f.name, x, y, w: pw, h: ph });
-      x += pw + PAD;
-      rowH = Math.max(rowH, ph);
     });
     const tex = scene.textures.addCanvas('atlas', canvas);
     frames.forEach((f) => tex.add(f.name, 0, f.x, f.y, f.w, f.h));

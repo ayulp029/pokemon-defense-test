@@ -93,6 +93,17 @@ PD.BestiaryScene = class BestiaryScene extends Phaser.Scene {
     this.page = data.page || 0;
   }
 
+  // batch3 敵人的圖鑑大圖（<代號>.png，864×1152）只在打開圖鑑時才載入成 book_<代號>，離開圖鑑就釋放，
+  // 不佔 iPad 戰鬥時的記憶體。缺檔就略過，放大圖退回場上同一套畫法（PD.bestiaryPic）
+  preload() {
+    const E = PD.config.enemies;
+    Object.keys(E).filter((k) => E[k].art && E[k].art.book && !this.textures.exists('book_' + k))
+      .forEach((k) => this.load.image('book_' + k, 'assets/local-art/' + E[k].art.book + '.png'));
+    this.events.once('shutdown', () => {
+      Object.keys(E).forEach((k) => { if (this.textures.exists('book_' + k)) this.textures.remove('book_' + k); });
+    });
+  }
+
   create() {
     PD.setupCamera(this);
     const L = PD.config.layout;

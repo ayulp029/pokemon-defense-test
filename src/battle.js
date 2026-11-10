@@ -975,7 +975,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
       v = this.acquireActor(e.id, 'enemy_' + e.kind, PD.names[e.kind], def.size, this.footY(e.lane), true);
       v.kind = e.kind;
       PD.Bestiary.seeEnemy(e.kind); // 圖鑑：真的出現在場上才算遇到
-      if (this.textures.exists('art_' + (def.artFrom || e.kind))) v.label.setText(''); // 有貼圖就不在身上蓋字
+      if (!def.plain) v.label.setText(''); // 有貼圖就不在身上蓋字
       v.c.setDepth(25 + e.lane * 10 + (def.flying ? 5 : 0)); // 飛的畫在同路其他敵人上面
       v.hover = def.hover || 0;
       v.aura = def.aura || 0;
@@ -1139,9 +1139,9 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     if (v.flash > 0) {
       v.flash -= dt;
       // 隊長／大王很大又一直被打：整隻變白剪影太刺眼，改成淡淡的粉紅色調；
-      // 沒有貼圖的色塊敵人（厚殼機器人）閃白會變成一整塊白方塊，也用粉紅色調；其他敵人照舊閃白
+      // 沒有貼圖的色塊敵人（缺圖退回時）閃白會變成一整塊白方塊，也用粉紅色調；其他敵人照舊閃白
       const ed = v.isEnemy && this.cfg.enemies[v.kind];
-      if (ed && (ed.boss || ed.noArt)) v.body.setTint(0xffc4cc);
+      if (ed && (ed.boss || ed.plain)) v.body.setTint(0xffc4cc);
       else v.body.setTintFill(0xffffff);
       v.tintNow = -1; // 閃白結束後重新套色
       offX += Math.sin(v.flash * 90) * 2;

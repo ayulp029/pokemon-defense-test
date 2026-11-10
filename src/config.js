@@ -21,7 +21,7 @@ window.PD = window.PD || {};
     runner: '跑腿貓',
     armored: '厚殼機器人',
     pierceShooter: '水晶龍',
-    // 第 2、3 關的新敵人（圖都是四張已公開貼圖重新上色，見 enemies 的 artFrom）
+    // 第 2、3 關的新敵人（圖用 batch3 專屬貼圖，缺圖才退回已公開貼圖重新上色，見 enemies 的 art／artFrom）
     bruiser: '鐵甲熊兵',
     healer: '補補蛙',
     jumper: '彈跳蜥',
@@ -300,32 +300,36 @@ window.PD = window.PD || {};
     scout: { hp: 4, secPerCell: 8, size: { w: 62, h: 94 }, color: 0x9aa3b5, light: 0xe6eaf2, shape: 'robot' },
     tough: { hp: 6, secPerCell: 8, size: { w: 62, h: 94 }, color: 0x8a5cc0, light: 0xe0ccf5, shape: 'stripe' },
     runner: { hp: 6, secPerCell: 5, size: { w: 62, h: 94 }, color: 0xe88fb0, light: 0xfde0ea, shape: 'swift' },
-    // noArt＝沒有專屬貼圖，不去載入（以前會多要一次不存在的 armored.png、出現 404），直接用程式畫的色塊
-    armored: { hp: 12, secPerCell: 10, size: { w: 72, h: 108 }, color: 0x6c7484, light: 0xc2c9d6, shape: 'plated', accessory: 'pads', noArt: true },
-    // artFrom＝用哪張已公開貼圖重新上色（程式即時畫，不產生新圖檔），recolor＝上色的顏色，outline＝描邊色。缺貼圖時退回 shape 色塊
-    // batch2 專屬貼圖（2026-11-10 擁有者要求接入；assets/local-art/<file>.png，面朝左）：art 的用法和頭目一樣（box＝取哪一塊，
-    // 左右以腳底中心對稱、含整隻不裁切；size＝有貼圖時的畫面大小）。圖上已有十字、彈簧、肩甲，不再加程式配件。
-    // 缺檔時退回下面的 artFrom 重新上色＋程式配件。小搗蛋只取雙胞搗蛋圖右邊那一隻
-    bruiser: { art: { file: 'bruiser', box: { x: 0, y: 16, w: 202, h: 262 }, size: { w: 88, h: 114 } }, hp: 24, secPerCell: 5.5, size: { w: 80, h: 112 }, color: 0x6f7f92, light: 0xcfd8e3, shape: 'plated', artFrom: 'tank', recolor: 0x8596ab, outline: 0x27313d, accessory: 'pads' },
-    healer: { art: { file: 'healer', box: { x: 21, y: 36, w: 110, h: 208 }, size: { w: 52, h: 98 } }, hp: 7, secPerCell: 3.25, size: { w: 62, h: 94 }, color: 0xf08bb4, light: 0xffe0ec, shape: 'stripe', artFrom: 'doubleStriker', recolor: 0xff7fb0, outline: 0xb0296a, accessory: 'cross', heal: { amount: 2, every: 3, reach: 2 } },
-    jumper: { art: { file: 'jumper', box: { x: 0, y: 96, w: 152, h: 148 }, size: { w: 78, h: 76 } }, hp: 6, secPerCell: 3, size: { w: 72, h: 80 }, bodyBox: { x: 2, y: 0, w: 68, h: 70 }, color: 0x35b5a8, light: 0xc8f5ee, shape: 'swift', artFrom: 'burnShooter', recolor: 0x2fc4b4, outline: 0x0d5a55, accessory: 'spring', hopOver: true },
-    splitter: { art: { file: 'splitter', box: { x: 2, y: 109, w: 228, h: 167 }, size: { w: 117, h: 86 } }, hp: 9, secPerCell: 3.25, size: { w: 58, h: 96 }, color: 0xd9544f, light: 0xffd9d0, shape: 'robot', artFrom: 'trainer', recolor: 0xe2453c, outline: 0x7a1414, accessory: 'twin', splitInto: { kind: 'splitling', count: 2 } },
-    splitling: { art: { file: 'splitter', box: { x: 110, y: 109, w: 120, h: 167 }, size: { w: 46, h: 64 } }, hp: 3, secPerCell: 2.6, size: { w: 40, h: 66 }, color: 0xf0817a, light: 0xffe4df, shape: 'robot', artFrom: 'trainer', recolor: 0xf26a5e, outline: 0x7a1414, noOrb: true },
+    // batch3 專屬貼圖（毛毛畫、PM 納納博士核准接入，2026-11-10；assets/local-art/，面朝左）：
+    //   art.file＝場上圖 <代號>-game.png（腳底錨點：240 寬的在 (120,272)、200 寬的在 (100,240)，飄飄翼 (120,240)；錨點下方 16 像素是透明）
+    //   art.anchor＝腳底錨點；art.box＝從場上圖取哪一塊：左右以錨點 x 為中心對稱、下緣正好切在錨點 y（腳踩在路上，不浮空）、
+    //   上與左右各留 6 像素透明邊（含整隻不裁切）。場上角色的原點在腳底（0.5, 1），所以錨點會正好落在路面的腳底位置
+    //   art.size＝場上的畫面大小（邏輯像素，只是外觀，規則不看）；art.book＝圖鑑放大圖 <代號>.png（864×1152，只有打開圖鑑才載入）
+    //   圖上已有肩甲／十字／彈簧／雙胞裝飾，不再加程式配件。缺檔時：厚殼機器人、飄飄翼、丟丟猴、躲躲影退回色塊；
+    //   鐵甲熊兵、補補蛙、彈跳蜥、雙胞搗蛋、小搗蛋退回下面的 artFrom 重新上色＋程式配件（artFrom＝借哪張已公開貼圖，recolor＝上色顏色，outline＝描邊色）
+    armored: { art: { file: 'armored-game', book: 'armored', anchor: { x: 120, y: 272 }, box: { x: 10, y: 14, w: 220, h: 258 }, size: { w: 92, h: 108 } }, hp: 12, secPerCell: 10, size: { w: 72, h: 108 }, color: 0x6c7484, light: 0xc2c9d6, shape: 'plated' },
+    bruiser: { art: { file: 'bruiser-game', book: 'bruiser', anchor: { x: 120, y: 272 }, box: { x: 28, y: 14, w: 184, h: 258 }, size: { w: 81, h: 114 } }, hp: 24, secPerCell: 5.5, size: { w: 80, h: 112 }, color: 0x6f7f92, light: 0xcfd8e3, shape: 'plated', artFrom: 'tank', recolor: 0x8596ab, outline: 0x27313d, accessory: 'pads' },
+    healer: { art: { file: 'healer-game', book: 'healer', anchor: { x: 100, y: 240 }, box: { x: 40, y: 14, w: 120, h: 226 }, size: { w: 52, h: 98 } }, hp: 7, secPerCell: 3.25, size: { w: 62, h: 94 }, color: 0xf08bb4, light: 0xffe0ec, shape: 'stripe', artFrom: 'doubleStriker', recolor: 0xff7fb0, outline: 0xb0296a, accessory: 'cross', heal: { amount: 2, every: 3, reach: 2 } },
+    jumper: { art: { file: 'jumper-game', book: 'jumper', anchor: { x: 100, y: 240 }, box: { x: 1, y: 55, w: 198, h: 185 }, size: { w: 86, h: 80 } }, hp: 6, secPerCell: 3, size: { w: 72, h: 80 }, bodyBox: { x: 2, y: 0, w: 68, h: 70 }, color: 0x35b5a8, light: 0xc8f5ee, shape: 'swift', artFrom: 'burnShooter', recolor: 0x2fc4b4, outline: 0x0d5a55, accessory: 'spring', hopOver: true },
+    splitter: { art: { file: 'splitter-game', book: 'splitter', anchor: { x: 120, y: 272 }, box: { x: 0, y: 118, w: 240, h: 154 }, size: { w: 131, h: 84 } }, hp: 9, secPerCell: 3.25, size: { w: 58, h: 96 }, color: 0xd9544f, light: 0xffd9d0, shape: 'robot', artFrom: 'trainer', recolor: 0xe2453c, outline: 0x7a1414, accessory: 'twin', splitInto: { kind: 'splitling', count: 2 } },
+    // 小搗蛋不在 batch3：取 splitter-game.png 右邊那一隻（x 128 以右；錨點取牠自己的腳底 (166, 272)）。
+    //   cut＝原圖 x 小於這個值的像素丟掉（左邊那隻的尾巴不會跑進來）。沒有圖鑑大圖（圖鑑把小搗蛋併進雙胞搗蛋）
+    splitling: { art: { file: 'splitter-game', anchor: { x: 166, y: 272 }, box: { x: 92, y: 118, w: 148, h: 154 }, cut: 128, size: { w: 62, h: 64 } }, hp: 3, secPerCell: 2.6, size: { w: 40, h: 66 }, color: 0xf0817a, light: 0xffe4df, shape: 'robot', artFrom: 'trainer', recolor: 0xf26a5e, outline: 0x7a1414, noOrb: true },
     // ===== 第 4～6 關（建議值，尚未實測）=====
-    // accessory＝程式畫的配件（textures.js），bodyBox＝本體在圖框裡的位置（留空間給配件）。
-    // 第 2、3 關的敵人也有「職責配件」（docs/beautify-top5-v1.md 第 4 項）：補補蛙頭上十字、彈跳蜥腳下彈簧、雙胞搗蛋肩上兩顆圓點、鐵甲熊兵與厚殼機器人的肩甲
+    // accessory＝程式畫的配件（textures.js），bodyBox＝本體在圖框裡的位置（留空間給配件）；batch3 有圖的敵人只在缺圖退回時才用。
+    // 飄飄翼、丟丟猴、躲躲影改用 batch3 自己的圖，不再借朋友圖上色、也不畫翅膀／帽子／眼罩；缺檔時退回色塊
     // flying：不被任何角色擋住，近戰打不到；throwAt：邊走邊丟球打同路前方的遠攻角色；cloak：顯形／隱身輪流（秒）
     flyer: {
-      hp: 4, secPerCell: 3.4, size: { w: 96, h: 84 }, bodyBox: { x: 6, y: 20, w: 84, h: 64 }, color: 0x7fa8ff, light: 0xdce8ff, shape: 'swift',
-      artFrom: 'burnShooter', recolor: 0x6f9bff, outline: 0x1f3f8a, accessory: 'wings', flying: true, hover: 34,
+      art: { file: 'flyer-game', book: 'flyer', anchor: { x: 120, y: 240 }, box: { x: 1, y: 63, w: 238, h: 177 }, size: { w: 110, h: 82 } },
+      hp: 4, secPerCell: 3.4, size: { w: 84, h: 72 }, color: 0x7fa8ff, light: 0xdce8ff, shape: 'swift', flying: true, hover: 34,
     },
     lobber: {
-      hp: 7, secPerCell: 3.6, size: { w: 66, h: 100 }, bodyBox: { x: 2, y: 18, w: 62, h: 82 }, color: 0xf2b134, light: 0xfff0c8, shape: 'stripe',
-      artFrom: 'doubleStriker', recolor: 0xf0a91e, outline: 0x7a4a05, accessory: 'hat', throwAt: { every: 4, damage: 2, reach: 5 },
+      art: { file: 'lobber-game', book: 'lobber', anchor: { x: 100, y: 240 }, box: { x: 1, y: 24, w: 198, h: 216 }, size: { w: 92, h: 100 } },
+      hp: 7, secPerCell: 3.6, size: { w: 62, h: 94 }, color: 0xf2b134, light: 0xfff0c8, shape: 'stripe', throwAt: { every: 4, damage: 2, reach: 5 },
     },
     phantom: {
-      hp: 7, secPerCell: 3.25, size: { w: 66, h: 100 }, color: 0x7a70d8, light: 0xe4e0ff, shape: 'stripe',
-      artFrom: 'trainer', recolor: 0x6a5fd6, outline: 0x2a2470, accessory: 'mask', cloak: { visible: 3, hidden: 2.5 },
+      art: { file: 'phantom-game', book: 'phantom', anchor: { x: 100, y: 240 }, box: { x: 15, y: 14, w: 170, h: 226 }, size: { w: 75, h: 100 } },
+      hp: 7, secPerCell: 3.25, size: { w: 66, h: 100 }, color: 0x7a70d8, light: 0xe4e0ff, shape: 'stripe', cloak: { visible: 3, hidden: 2.5 },
     },
     // boss：大血條、不會被推回；entryPause＝登場先站一下；homeCost＝走進村莊算掉幾次救援；orbDrop＝打倒掉幾顆球
     // art＝專屬貼圖（assets/local-art/<file>.png，宇鋒 2026-11-10 核准公開的鼓鼓隊長 v2，320×384、本來就面朝左、腳底約在 160,368）。

@@ -18,11 +18,12 @@ PD.BootScene = class BootScene extends Phaser.Scene {
 
   // 本機貼圖（我方與敵人）：不存在的檔案載入失敗就略過，該角色自動用色塊
   preload() {
-    // 用 artFrom 重新上色的敵人、標了 noArt 的（例如厚殼機器人）沒有自己的檔案，不用載入
+    // 用 artFrom 重新上色的敵人、有 art 專屬圖設定的（頭目、batch3）不載入 <代號>.png（batch3 的 <代號>.png 是 864×1152 的圖鑑大圖，
+    // 只有打開圖鑑才載入，見 bestiary.js），標了 noArt 的沒有自己的檔案
     const E = PD.config.enemies;
-    [...PD.config.cardOrder.filter((k) => !PD.config.units[k].noArt), ...Object.keys(E).filter((k) => !E[k].artFrom && !E[k].noArt)]
+    [...PD.config.cardOrder.filter((k) => !PD.config.units[k].noArt), ...Object.keys(E).filter((k) => !E[k].artFrom && !E[k].art && !E[k].noArt)]
       .forEach((k) => this.load.image('art_' + k, 'assets/local-art/' + k + '.png'));
-    // 敵人的專屬貼圖（頭目 boss.png）：缺檔時載入失敗就略過，退回重新上色的圖
+    // 敵人的專屬貼圖（頭目 boss.png、batch3 的 <代號>-game.png）：缺檔時載入失敗就略過，退回重新上色的圖或色塊
     const own = new Set(Object.values(PD.config.enemies).filter((d) => d.art).map((d) => d.art.file));
     own.forEach((f) => { if (!this.textures.exists('art_' + f)) this.load.image('art_' + f, 'assets/local-art/' + f + '.png'); });
     // 卡片特寫（card-<代號>.png）與第 4～6 關的圖檔背景（bgArt）：缺檔一樣略過，退回原本的小全身圖／程式畫的草地
@@ -38,9 +39,11 @@ PD.BootScene = class BootScene extends Phaser.Scene {
 
   create() {
     // 有專屬貼圖的敵人：畫面大小換成貼圖的比例（只影響外觀，規則不看大小）
-    Object.values(PD.config.enemies).forEach((d) => {
+    // plain＝完全沒有貼圖、只能畫色塊（閃白會變一整塊白方塊，改用粉紅色調；身上要蓋名字）
+    Object.entries(PD.config.enemies).forEach(([k, d]) => {
       d.ownArt = !!(d.art && this.textures.exists('art_' + d.art.file));
       if (d.ownArt) d.size = d.art.size;
+      d.plain = !d.ownArt && !this.textures.exists('art_' + (d.artFrom || k));
     });
     PD.buildAtlas(this, PD.config);
     PD.buildBackground(this, PD.config, PD.config.levels[0]);
@@ -106,6 +109,7 @@ PD.optionalArtFiles = function () {
   return [
     ...C.cardOrder, ...Object.keys(C.enemies),
     ...Object.values(C.enemies).filter((d) => d.art).map((d) => d.art.file),
+    ...Object.values(C.enemies).filter((d) => d.art && d.art.book).map((d) => d.art.book),
     ...C.cardOrder.filter((k) => C.units[k].cardArt).map((k) => 'card-' + k),
     ...C.levels.filter((lv) => lv.bgArt).map((lv) => lv.bgArt.file),
     ...Object.values(C.units).filter((d) => d.idleSheet).map((d) => d.idleSheet.file),
