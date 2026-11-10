@@ -48,9 +48,14 @@ PD.Overlay = class Overlay {
     this.msg = PD.txt(scene, this.cx, 368, '', 32);
     this.c.add([this.dim, this.panel, this.title, this.msg]);
     // 勝利畫面的星星（其他畫面不顯示）
-    this.stars = [0, 1, 2].map((i) => PD.img(scene, this.cx + (i - 1) * 84, 330, 'rankStar').setScale(PD.TEX_SCALE * 1.1).setVisible(false));
-    this.starNote = PD.txt(scene, this.cx + 240, 330, '', 26, '#ffe9a8');
-    this.c.add(this.stars.concat(this.starNote));
+    // 星星置中一排；「星星變多了！」放在星星正下方（以前擠在星星右邊，小螢幕不好對齊）
+    this.starY = 322;
+    // 拿到的金星背後一團暖色柔光（現成的 glow 圖＋疊加混色），讓金星更有光澤；沒拿到的空星不加
+    this.starGlows = [0, 1, 2].map((i) => scene.add.image(this.cx + (i - 1) * 84, this.starY, 'atlas', 'glow')
+      .setBlendMode(Phaser.BlendModes.ADD).setTint(0xffc83a).setScale(PD.TEX_SCALE * 1.35).setVisible(false));
+    this.stars = [0, 1, 2].map((i) => PD.img(scene, this.cx + (i - 1) * 84, this.starY, 'rankStar').setScale(PD.TEX_SCALE * 1.1).setVisible(false));
+    this.starNote = PD.txt(scene, this.cx, this.starY + 52, '', 26, '#ffe9a8');
+    this.c.add(this.starGlows.concat(this.stars, this.starNote));
     this.starCount = 0;
     this.btns = [];
     for (let i = 0; i < 4; i++) {
@@ -71,19 +76,29 @@ PD.Overlay = class Overlay {
       st.setVisible(starCount > 0).setFrame(i < starCount ? 'rankStar' : 'rankStarEmpty');
       this.scene.tweens.killTweensOf(st);
       st.setScale(PD.TEX_SCALE * 1.1).setAngle(0);
-      // 拿到的星星一顆一顆輕輕跳出來（真實時間，覆蓋畫面時戰鬥已停）
-      if (starCount > 0 && i < starCount && !PD.settings.reduceFx) {
+      const glow = this.starGlows[i];
+      const earned = starCount > 0 && i < starCount;
+      this.scene.tweens.killTweensOf(glow);
+      glow.setVisible(earned).setAlpha(0.5);
+      // 拿到的星星一顆一顆輕輕跳出來（真實時間，覆蓋畫面時戰鬥已停）；柔光跟著出現後慢慢呼吸。
+      // 「減少特效」時星星不跳、柔光固定亮度
+      if (earned && !PD.settings.reduceFx) {
         st.setScale(0.01);
+        glow.setAlpha(0);
         this.scene.tweens.add({ targets: st, scale: PD.TEX_SCALE * 1.1, duration: 260, delay: 250 + i * 220, ease: 'Back.easeOut' });
+        this.scene.tweens.add({ targets: glow, alpha: 0.6, duration: 300, delay: 250 + i * 220, onComplete: () => {
+          this.scene.tweens.add({ targets: glow, alpha: 0.35, duration: 1600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+        } });
       }
     });
-    this.starNote.setText((opts && opts.note) || '').setVisible(starCount > 0);
+    const note = (opts && opts.note) || '';
+    this.starNote.setText(note).setVisible(starCount > 0 && !!note);
     // 四顆按鈕排成兩列兩行（暫停畫面），其他情況排一列
     const twoRows = buttons.length > 3;
     const perRow = twoRows ? 2 : buttons.length;
     const startX = this.cx - (perRow * 300 + (perRow - 1) * 30) / 2 + 150;
-    this.title.setY(twoRows ? 262 : starCount ? 256 : 280);
-    this.msg.setY(twoRows ? 336 : starCount ? 398 : 368);
+    this.title.setY(twoRows ? 262 : starCount ? 254 : 280);
+    this.msg.setY(twoRows ? 336 : starCount ? (note ? 416 : 398) : 368);
     this.btns.forEach((b, i) => {
       const def = buttons[i];
       b.on = !!def;
@@ -100,11 +115,13 @@ PD.Overlay = class Overlay {
     });
     this.c.setVisible(true);
     this.visible = true;
+    if (this.onToggle) this.onToggle(true);
   }
 
   hide() {
     this.c.setVisible(false);
     this.visible = false;
+    if (this.onToggle) this.onToggle(false);
   }
 
   relabel(index, label) { this.btns[index].label.setText(label); }

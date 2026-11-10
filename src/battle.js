@@ -126,6 +126,10 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     }
 
     this.hintText = PD.txt(this, L.hint.x, L.hint.y, '', 30, '#ffffff', 5).setDepth(400);
+    // 勝利／失敗／暫停／介紹等覆蓋畫面開著時，上排提示句先藏起來（例如勝利時不再寫「球會自己收好。」），
+    // 關掉後原本的提示照舊顯示、照舊計時清掉
+    this.overlay.onToggle = (shown) => this.hintText.setVisible(!shown);
+    this.hintText.setVisible(!this.overlay.visible);
 
     // 按鈕底圖與上面的圖示／字：按下時一起往下（PD.press）
     this.pressables = [];
@@ -193,22 +197,36 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     const recallIcon = PD.img(this, bx, by - 14, 'iconRecall').setDepth(401);
     const recallText = PD.txt(this, bx, B.y + B.h - 26, PD.text.recall, 24).setDepth(401);
     this.pressables.push({ r: B, bg: recallBg, extras: [recallIcon, recallText] });
+    this.actionParts = [recallBg, recallIcon, recallText];
     this.recallLabel = PD.txt(this, 0, 0, PD.text.recallAgainLabel, 22, '#ffe9a8', 4).setDepth(410).setVisible(false);
     const R = this.L.cancelBtn;
     this.cancelBg = PD.img(this, R.x + R.w / 2, R.y + R.h / 2, 'cancel').setDepth(400);
     this.cancelIcon = PD.img(this, R.x + R.w / 2, R.y + R.h / 2 - 12, 'iconCancel').setDepth(401);
     this.cancelText = PD.txt(this, R.x + R.w / 2, R.y + R.h - 26, PD.text.cancel, 22).setDepth(401);
     this.pressables.push({ r: R, bg: this.cancelBg, extras: [this.cancelIcon, this.cancelText] });
+    this.actionParts.push(this.cancelBg, this.cancelIcon, this.cancelText);
+    this.actionLit = null;
+    this.refreshActionBtns();
+  }
+
+  // 沒選卡片、也不在請回流程時，「請回」「取消」兩顆大按鈕變暗，不搶孩子的視線；
+  // 只改外觀：點擊範圍不變（136×120、120×120），點了照舊（請回會進入請回流程、取消沒有事可取消）
+  refreshActionBtns() {
+    const lit = !!this.selected || !!this.recalling;
+    if (lit === this.actionLit) return;
+    this.actionLit = lit;
+    this.actionParts.forEach((o) => o.setAlpha(lit ? 1 : 0.45));
   }
 
   // ===== 常駐技能圖示列 =====
-  // 每種角色一顆，順序同卡片列；本關還沒解鎖的不畫，位置固定不跳動
+  // 每種角色一顆，順序同卡片列；本關還沒解鎖的角色完全不做插槽（不畫、不能點），
+  // 已解鎖的由上往下緊排，中間不留空洞（背景木架的圓槽數也一樣，見 scenery.js 的 PD.skillKinds）
   buildSkillBar() {
     const B = this.L.skillBar;
     this.skillSweep = this.add.graphics().setDepth(402);
-    this.skillSlots = this.cfg.cardOrder.filter((k) => this.cfg.skills[k]).map((kind, i) => {
+    this.skillSlots = PD.skillKinds(this.cfg, this.sim.level).map((kind, i) => {
       const y = B.firstY + i * B.gap;
-      const enabled = this.sim.isUnlocked(kind);
+      const enabled = true;
       const glow = this.add.image(B.x, y, 'atlas', 'glow').setDepth(399).setBlendMode(Phaser.BlendModes.ADD)
         .setTint(parseInt(this.cfg.skills[kind].bar[1].slice(1), 16)).setScale(PD.TEX_SCALE * (B.size * 1.5) / 96).setVisible(false);
       const ring = this.add.image(B.x, y, 'atlas', 'ring').setDepth(404).setBlendMode(Phaser.BlendModes.ADD).setVisible(false);
@@ -604,6 +622,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     this.syncViews(this.accum / this.cfg.rules.tickSeconds);
     this.updateHud(dt);
     this.updateSkillBar(dt);
+    this.refreshActionBtns();
     this.pumpSkillTips();
     this.updateSpot();
     if (this.hintClearAt && this.clock >= this.hintClearAt) { this.hintClearAt = 0; this.showHint(''); }

@@ -296,8 +296,10 @@ window.PD = window.PD || {};
   }
 
   // ===== 村莊 =====
-  // 技能架：村莊欄中間一條圓角木板，每顆技能圖示一個淺凹的圓槽（沒解鎖的槽空著，看起來是「還沒放東西」）
+  // 技能架：村莊欄上方一條圓角木板，每顆技能圖示一個淺凹的圓槽。只畫本關已解鎖的數量，
+  // 木板跟著變短（第 1 關只有 2 槽），不再留一排空的圓孔看起來像沒做完
   function drawSkillRack(c, L, slots) {
+    if (slots <= 0) return;
     const B = L.skillBar;
     const r = B.size / 2;
     const x0 = B.x - r - 10, w = B.size + 20;
@@ -548,6 +550,11 @@ window.PD = window.PD || {};
     c.fillStyle = vGrad(c, G.y + fieldH - edge, G.y + fieldH, [clear, shade]); c.fillRect(G.x, G.y + fieldH - edge, fieldW, edge);
   }
 
+  // 這一關有技能插槽的角色（已解鎖、有技能，順序同卡片列）。戰鬥畫面的插槽與木架圓槽都用這張表，數量一定相同
+  PD.skillKinds = function (cfg, level) {
+    return cfg.cardOrder.filter((k) => cfg.skills[k] && (cfg.debug.unlockAll || cfg.units[k].unlock <= level.number));
+  };
+
   // 場地背景（靜態，只畫一次）
   PD.buildBackground = function (scene, cfg, level, key) {
     const L = cfg.layout;
@@ -559,7 +566,7 @@ window.PD = window.PD || {};
     const artKey = 'bgArt_' + level.number;
     const art = level.bgArt && scene.textures.exists(artKey) ? scene.textures.get(artKey).getSourceImage() : null;
     if (art) drawBgArt(c, L, art, level.bgArt);
-    drawVillage(c, L, rand, level.theme, cfg.cardOrder.filter((k) => cfg.skills[k]).length);
+    drawVillage(c, L, rand, level.theme, PD.skillKinds(cfg, level).length);
     drawSpawn(c, cfg, level, rand);
     if (art) drawFieldOnArt(c, cfg, level); else drawField(c, cfg, level, rand);
     drawChrome(c, L, rand, level.theme);
@@ -571,10 +578,11 @@ window.PD = window.PD || {};
   PD.levelBackground = function (scene, cfg, level) {
     if (!level.theme) return 'bg';
     const key = 'bg_level';
-    if (PD.bgLevelNumber !== level.number) {
+    const id = level.number + ':' + PD.skillKinds(cfg, level).length; // 木架圓槽數不同（例如測試開了 unlockAll）也要重畫
+    if (PD.bgLevelNumber !== id) {
       if (scene.textures.exists(key)) scene.textures.remove(key);
       PD.buildBackground(scene, cfg, level, key);
-      PD.bgLevelNumber = level.number;
+      PD.bgLevelNumber = id;
     }
     return key;
   };

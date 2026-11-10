@@ -34,6 +34,7 @@ PD.MapScene = class MapScene extends Phaser.Scene {
   drawPath(points) {
     const g = this.add.graphics();
     const curve = new Phaser.Curves.Spline(points.map((p) => new Phaser.Math.Vector2(p.x, p.y)));
+    this.pathPts = curve.getSpacedPoints(240); // 給星星底牌避開路徑用
     g.lineStyle(52, 0x0f1a24, 0.35);
     curve.draw(g, 96);
     g.lineStyle(44, 0x8a6a3a, 1);
@@ -86,8 +87,17 @@ PD.MapScene = class MapScene extends Phaser.Scene {
       // 過關的星星（重玩只留最好的一次）；舊存檔沒有星星紀錄時照舊寫「過關了」
       const stars = PD.Progress.stars(this.modeId, level.number);
       if (stars) {
+        // 星星底牌：和關卡名木牌同一套（深色外框＋木板＋上緣亮條＋木紋），但木色較深，
+        // 每顆星底下再一個深色圓槽，空心星的淺色外框在草地／山坡上也看得清楚
         const sy = at.y + R + 22;
-        g.fillStyle(0x1f2a38, 0.75).fillRoundedRect(at.x - 76, sy - 26, 152, 52, 26);
+        const sx = at.x + this.plateShift(at.x, sy, 82, 29);
+        at = { x: sx, y: at.y }; // 底下只用來畫底牌與星星；圓鈕與點擊範圍上面已經算好
+        g.fillStyle(0x0f1a24, 0.35).fillRoundedRect(at.x - 82 + 3, sy - 29 + 5, 164, 58, 16);
+        g.fillStyle(0x1f2a38, 1).fillRoundedRect(at.x - 82, sy - 29, 164, 58, 16);
+        g.fillStyle(0x7a532c, 1).fillRoundedRect(at.x - 79, sy - 26, 158, 52, 13);
+        g.fillStyle(0x956a3c, 1).fillRoundedRect(at.x - 79, sy - 26, 158, 16, { tl: 13, tr: 13, bl: 0, br: 0 });
+        g.fillStyle(0x5a3a1c, 0.55).fillRect(at.x - 70, sy + 2, 140, 2).fillRect(at.x - 64, sy + 14, 128, 2);
+        for (let i = 0; i < 3; i++) g.fillStyle(0x2a1a0c, 0.75).fillCircle(at.x + (i - 1) * 46, sy + 1, 22);
         for (let i = 0; i < 3; i++) {
           PD.img(this, at.x + (i - 1) * 46, sy, i < stars ? 'rankStar' : 'rankStarEmpty').setScale(PD.TEX_SCALE * 0.66);
         }
@@ -103,6 +113,18 @@ PD.MapScene = class MapScene extends Phaser.Scene {
     });
     PD.txt(this, at.x, at.y + R + 24, PD.text.newFriend + '：' + fresh.map((k) => PD.names[k]).join('、'), 24, '#ffe9a8');
     return { level, rect, open };
+  }
+
+  // 底牌往左右挪到不壓小路（路面半寬 26）：第 3 關下方是往下轉彎的路，置中會壓到；其他關不用挪
+  plateShift(cx, cy, hw, hh) {
+    const pad = 28;
+    const tries = [0, -24, 24, -48, 48, -72, 72, -96, 96];
+    for (let i = 0; i < tries.length; i++) {
+      const x = cx + tries[i];
+      const hit = this.pathPts.some((p) => Math.abs(p.x - x) < hw + pad && Math.abs(p.y - cy) < hh + pad);
+      if (!hit) return tries[i];
+    }
+    return 0;
   }
 
   // 最後一關的小隊旗：旗桿加三角旗，旗上是搗蛋團的歪菱形隊徽（不是文字或字母）

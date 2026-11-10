@@ -547,12 +547,16 @@ PD.TEX_SCALE = 1 / PD.RES;
       c.lineJoin = 'round'; c.lineWidth = 4; c.strokeStyle = OUTLINE; c.stroke();
       star(c, 32, 34, 29, 13); c.save(); c.clip();
       c.fillStyle = '#ffb21f'; c.fillRect(32, 0, 40, 64);
-      c.fillStyle = 'rgba(255,255,255,0.7)'; c.beginPath(); c.ellipse(24, 24, 7, 4, -0.6, 0, 7); c.fill();
+      // 光澤：內緣一圈淡亮邊＋兩點高光
+      star(c, 32, 34, 24, 11); c.lineJoin = 'round'; c.lineWidth = 2; c.strokeStyle = 'rgba(255,248,200,0.75)'; c.stroke();
+      c.fillStyle = 'rgba(255,255,255,0.85)'; c.beginPath(); c.ellipse(24, 24, 7, 4, -0.6, 0, 7); c.fill();
+      c.fillStyle = 'rgba(255,255,255,0.6)'; c.beginPath(); c.arc(33, 15, 2.5, 0, 7); c.fill();
       c.restore();
     });
+    // 空星：深底＋幾乎不透明的淺色外框，放在深色底牌或面板上都看得清楚
     add('rankStarEmpty', 64, 64, (c) => {
-      star(c, 32, 34, 29, 13); c.fillStyle = 'rgba(31,42,56,0.55)'; c.fill();
-      c.lineJoin = 'round'; c.lineWidth = 4; c.strokeStyle = 'rgba(240,244,248,0.75)'; c.stroke();
+      star(c, 32, 34, 29, 13); c.fillStyle = 'rgba(20,28,38,0.7)'; c.fill();
+      c.lineJoin = 'round'; c.lineWidth = 4; c.strokeStyle = 'rgba(244,247,250,0.95)'; c.stroke();
     });
     add('ring', 96, 96, (c) => {
       c.strokeStyle = '#fff'; c.lineWidth = 5; c.beginPath(); c.arc(48, 48, 44, 0, 7); c.stroke();
