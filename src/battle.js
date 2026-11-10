@@ -1108,8 +1108,10 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     if (v.hover) offY -= v.hover + Math.sin(this.worldClock * 3 + v.seed) * 4; // 飛在空中，影子留在地上
     if (v.flash > 0) {
       v.flash -= dt;
-      // 隊長／大王很大又一直被打：整隻變白剪影太刺眼，改成淡淡的粉紅色調；一般敵人照舊閃白
-      if (v.isEnemy && this.cfg.enemies[v.kind].boss) v.body.setTint(0xffc4cc);
+      // 隊長／大王很大又一直被打：整隻變白剪影太刺眼，改成淡淡的粉紅色調；
+      // 沒有貼圖的色塊敵人（厚殼機器人）閃白會變成一整塊白方塊，也用粉紅色調；其他敵人照舊閃白
+      const ed = v.isEnemy && this.cfg.enemies[v.kind];
+      if (ed && (ed.boss || ed.noArt)) v.body.setTint(0xffc4cc);
       else v.body.setTintFill(0xffffff);
       v.tintNow = -1; // 閃白結束後重新套色
       offX += Math.sin(v.flash * 90) * 2;
