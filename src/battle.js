@@ -117,15 +117,20 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
 
     this.hintText = PD.txt(this, L.hint.x, L.hint.y, '', 30, '#ffffff', 5).setDepth(400);
 
+    // 按鈕底圖與上面的圖示／字：按下時一起往下（PD.press）
+    this.pressables = [];
     const squareBtn = (r, icon) => {
-      PD.img(this, r.x + r.w / 2, r.y + r.h / 2, 'btnSquare').setDepth(400);
-      return PD.img(this, r.x + r.w / 2, r.y + r.h / 2, icon).setDepth(401);
+      const bg = PD.img(this, r.x + r.w / 2, r.y + r.h / 2, 'btnSquare').setDepth(400);
+      const top = PD.img(this, r.x + r.w / 2, r.y + r.h / 2, icon).setDepth(401);
+      this.pressables.push({ r, bg, extras: [top] });
+      return top;
     };
     this.muteIcon = squareBtn(L.muteBtn, PD.Sound.icon);
     squareBtn(L.pauseBtn, 'iconPause');
-    PD.img(this, L.speedBtn.x + L.speedBtn.w / 2, L.speedBtn.y + L.speedBtn.h / 2, 'btnSquare').setDepth(400);
+    const speedBg = PD.img(this, L.speedBtn.x + L.speedBtn.w / 2, L.speedBtn.y + L.speedBtn.h / 2, 'btnSquare').setDepth(400);
     this.speedText = PD.txt(this, L.speedBtn.x + L.speedBtn.w / 2, L.speedBtn.y + L.speedBtn.h / 2,
       PD.text.speedLabel(this.gameSpeed), 34).setDepth(401);
+    this.pressables.push({ r: L.speedBtn, bg: speedBg, extras: [this.speedText] });
 
     if (this.cfg.debug.dev) {
       this.fpsText = PD.txt(this, 1140, 110, '', 18).setDepth(450);
@@ -143,6 +148,9 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
       const glow = PD.img(this, cx, cy, 'cardGlow').setDepth(399).setTint(0xfff176)
         .setBlendMode(Phaser.BlendModes.ADD).setVisible(false).setScale(PD.TEX_SCALE * (C.w / 136), PD.TEX_SCALE);
       const bg = PD.img(this, cx, cy, unlocked ? 'card_' + kind : 'cardLocked').setDepth(400);
+      // 買得起：亮黃邊慢慢呼吸；買不起：名牌與價格徽章變灰（docs/beautify-top5-v1.md 第 1 項）
+      const edge = PD.img(this, cx, cy, 'cardEdge').setDepth(401).setTint(0xffe84a).setVisible(false);
+      const plate = PD.img(this, cx, C.y + 102.5, 'cardPlate').setDepth(401).setTint(0xb0b6be).setVisible(false);
       // 價格徽章在左上角、角色圖靠右，兩者不重疊；鎖住的卡沒有徽章，圖放中間
       const picX = unlocked ? x + C.w - 34 : cx;
       const pic = PD.img(this, picX, C.y + 47, 'cardPic_' + kind).setDepth(401);
@@ -161,21 +169,23 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
         coin.setVisible(false);
         lockImg = PD.img(this, cx, C.y + 46, 'lock').setDepth(403).setTint(0xf0f4f8);
       }
-      return { kind, rect: { x, y: C.y, w: C.w, h: C.h }, def, bg, pic, name, badge, cost, coin, glow, cd, lockImg, unlocked };
+      return { kind, rect: { x, y: C.y, w: C.w, h: C.h }, def, bg, pic, name, badge, cost, coin, glow, cd, lockImg, unlocked, edge, plate, pressT: 0, canBuy: null };
     });
     const B = this.L.recallBtn;
     const bx = B.x + B.w / 2;
     const by = B.y + B.h / 2;
     this.recallGlow = PD.img(this, bx, by, 'cardGlow').setDepth(399).setTint(0xfff176)
       .setBlendMode(Phaser.BlendModes.ADD).setVisible(false);
-    PD.img(this, bx, by, 'recall').setDepth(400);
-    PD.img(this, bx, by - 14, 'iconRecall').setDepth(401);
-    PD.txt(this, bx, B.y + B.h - 26, PD.text.recall, 24).setDepth(401);
+    const recallBg = PD.img(this, bx, by, 'recall').setDepth(400);
+    const recallIcon = PD.img(this, bx, by - 14, 'iconRecall').setDepth(401);
+    const recallText = PD.txt(this, bx, B.y + B.h - 26, PD.text.recall, 24).setDepth(401);
+    this.pressables.push({ r: B, bg: recallBg, extras: [recallIcon, recallText] });
     this.recallLabel = PD.txt(this, 0, 0, PD.text.recallAgainLabel, 22, '#ffe9a8', 4).setDepth(410).setVisible(false);
     const R = this.L.cancelBtn;
     this.cancelBg = PD.img(this, R.x + R.w / 2, R.y + R.h / 2, 'cancel').setDepth(400);
     this.cancelIcon = PD.img(this, R.x + R.w / 2, R.y + R.h / 2 - 12, 'iconCancel').setDepth(401);
     this.cancelText = PD.txt(this, R.x + R.w / 2, R.y + R.h - 26, PD.text.cancel, 22).setDepth(401);
+    this.pressables.push({ r: R, bg: this.cancelBg, extras: [this.cancelIcon, this.cancelText] });
   }
 
   // ===== 常駐技能圖示列 =====
@@ -1003,14 +1013,36 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
       const card = this.cards[i];
       if (!card.unlocked) continue;
       const afford = s.balls >= card.def.cost;
-      card.pic.setAlpha(afford ? 1 : 0.45);
-      card.badge.setTint(afford ? 0xd2571a : 0x7b828c);
+      const canBuy = afford && this.cardUsable(card);
+      if (canBuy !== card.canBuy) {
+        card.canBuy = canBuy;
+        card.pic.setAlpha(canBuy ? 1 : 0.45);
+        card.badge.setTint(canBuy ? 0xd2571a : 0x7b828c);
+        card.plate.setVisible(!canBuy);
+        card.name.setColor(canBuy ? '#2a2a2a' : '#4a5058');
+        card.edge.setVisible(canBuy);
+      }
+      // 亮邊每 1.6 秒呼吸一次（0.35～0.85），用真實時間，不是快速閃爍；減少特效時固定亮度
+      if (canBuy) card.edge.setAlpha(this.fx.reduced ? 0.6 : 0.6 + 0.25 * Math.sin(this.clock * Math.PI * 2 / 1.6));
+      card.pressT = Math.max(0, card.pressT - dt);
       card.cd.setVisible(cdRatio > 0);
       if (cdRatio > 0) card.cd.setDisplaySize(card.rect.w, card.rect.h * cdRatio);
       const on = this.selected === card.kind || tut === card.kind;
       card.glow.setVisible(on);
       if (on) card.glow.setAlpha(this.selected === card.kind ? 0.9 : pulse);
-      card.bg.y = card.rect.y + card.rect.h / 2 - (this.selected === card.kind ? 6 : 0);
+      const dy = (card.pressT > 0 ? 4 : 0) - (this.selected === card.kind ? 6 : 0);
+      if (dy !== card.dy) {
+        const C = this.L.cards;
+        card.dy = dy;
+        card.bg.y = card.rect.y + card.rect.h / 2 + dy;
+        card.edge.y = card.bg.y;
+        card.pic.y = C.y + 47 + dy;
+        card.name.y = C.y + 102 + dy;
+        card.plate.y = C.y + 102.5 + dy;
+        card.badge.y = C.y + 25 + dy;
+        card.coin.y = C.y + 25 + dy;
+        card.cost.y = C.y + 25 + dy;
+      }
     }
 
     const cellPulse = 0.26 + Math.sin(this.clock * 5) * 0.1;
@@ -1189,6 +1221,10 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     if (this.tapSkillBar(x, y)) return;
     if (this.tapOrb(x, y)) return;
     const L = this.L;
+    for (let i = 0; i < this.pressables.length; i++) {
+      const b = this.pressables[i];
+      if (PD.hitRect(b.r, x, y)) PD.press(this, b.bg, b.extras);
+    }
     if (PD.hitRect(L.pauseBtn, x, y)) { PD.Sound.play('tap'); this.freeze('user'); return; }
     if (PD.hitRect(L.muteBtn, x, y)) { this.toggleMute(); return; }
     if (PD.hitRect(L.speedBtn, x, y)) { this.cycleSpeed(); return; }
@@ -1220,8 +1256,17 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     return true;
   }
 
+  // 這張卡現在點下去能不能選（不看球數）：開戰前只能選開戰需要的角色、小勇有人數上限
+  cardUsable(card) {
+    const s = this.sim.state;
+    if (s.phase === 'prep' && this.sim.level.requiredToStart.indexOf(card.kind) === -1) return false;
+    const max = card.def.maxCount;
+    return !(max && this.sim.countUnits(card.kind) >= max);
+  }
+
   tapCard(card) {
     PD.Sound.play('tap');
+    card.pressT = 0.12; // 按下去的回饋：整張往下 4（updateHud 依真實時間彈回）
     this.exitRecall();
     const s = this.sim.state;
     if (!card.unlocked) { this.showHint(PD.text.lockedCard(card.def.unlock)); return; }

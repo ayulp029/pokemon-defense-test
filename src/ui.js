@@ -15,6 +15,24 @@ PD.img = function (scene, x, y, frame) {
 
 PD.hitRect = (r, x, y) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
 
+// 按下的回饋：底圖換成「按下」那張（暗一階、往下 4），上面的圖示與字一起往下 4，0.12 秒後彈回（真實時間）。
+// 只是外觀，按鈕的功能照舊在點下去時執行。彈回時位置若已被別處改掉（例如覆蓋畫面換了按鈕），就不再動它。
+PD.press = function (scene, bg, extras) {
+  if (!bg || bg.pdPressed) return;
+  const up = bg.frame.name;
+  if (!scene.textures.get('atlas').has(up + 'Down')) return;
+  const list = [bg].concat(extras || []);
+  const ys = list.map((o) => o.y);
+  bg.pdPressed = true;
+  bg.setFrame(up + 'Down');
+  list.forEach((o, i) => { if (i) o.y = ys[i] + 4; });
+  scene.time.delayedCall(120, () => {
+    bg.pdPressed = false;
+    if (bg.frame.name === up + 'Down') bg.setFrame(up);
+    list.forEach((o, i) => { if (i && o.y === ys[i] + 4) o.y = ys[i]; });
+  });
+};
+
 // 全畫面覆蓋層；按鈕事先建好重複使用
 PD.Overlay = class Overlay {
   constructor(scene, cfg) {
@@ -75,7 +93,7 @@ PD.Overlay = class Overlay {
   tap(x, y) {
     for (let i = 0; i < this.btns.length; i++) {
       const b = this.btns[i];
-      if (b.on && PD.hitRect(b.rect, x, y)) { PD.Sound.play('tap'); b.fn(); return; }
+      if (b.on && PD.hitRect(b.rect, x, y)) { PD.Sound.play('tap'); PD.press(this.scene, b.bg, [b.label]); b.fn(); return; }
     }
   }
 };

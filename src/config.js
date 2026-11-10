@@ -32,7 +32,7 @@ window.PD = window.PD || {};
     lobber: '丟丟猴',
     phantom: '躲躲影',
     boss: '鐵鎚隊長',
-    finalBoss: '搗蛋大王',
+    finalBoss: '鼓鼓隊長', // 第 6 關最終魔王（宇鋒 2026-11-10 核准的頭目圖暫名；原暫名「搗蛋大王」）
     // 主動技能
     skill_trainer: '能量大豐收',
     skill_basicShooter: '閃電連發',
@@ -111,7 +111,7 @@ window.PD = window.PD || {};
       lobber: '會丟球打後面射遠的朋友，先打它',
       phantom: '會突然隱身，亮起來時再打它',
       boss: '又大又硬，還會叫小兵來幫忙',
-      finalBoss: '搗蛋團的大王！大家一起加油',
+      finalBoss: '搗蛋團的大隊長！會敲鼓讓大家走快',
     },
     terrainNoPlace: '這裡不能放朋友喔',
     bossComing: '隊長要來了，準備好！',
@@ -233,15 +233,16 @@ window.PD = window.PD || {};
     scout: { hp: 4, secPerCell: 8, size: { w: 62, h: 94 }, color: 0x9aa3b5, light: 0xe6eaf2, shape: 'robot' },
     tough: { hp: 6, secPerCell: 8, size: { w: 62, h: 94 }, color: 0x8a5cc0, light: 0xe0ccf5, shape: 'stripe' },
     runner: { hp: 6, secPerCell: 5, size: { w: 62, h: 94 }, color: 0xe88fb0, light: 0xfde0ea, shape: 'swift' },
-    armored: { hp: 12, secPerCell: 10, size: { w: 72, h: 108 }, color: 0x6c7484, light: 0xc2c9d6, shape: 'plated' },
+    armored: { hp: 12, secPerCell: 10, size: { w: 72, h: 108 }, color: 0x6c7484, light: 0xc2c9d6, shape: 'plated', accessory: 'pads' },
     // artFrom＝用哪張已公開貼圖重新上色（程式即時畫，不產生新圖檔），recolor＝上色的顏色，outline＝描邊色。缺貼圖時退回 shape 色塊
-    bruiser: { hp: 24, secPerCell: 5.5, size: { w: 80, h: 112 }, color: 0x6f7f92, light: 0xcfd8e3, shape: 'plated', artFrom: 'tank', recolor: 0x8596ab, outline: 0x27313d },
-    healer: { hp: 7, secPerCell: 3.25, size: { w: 62, h: 94 }, color: 0xf08bb4, light: 0xffe0ec, shape: 'stripe', artFrom: 'doubleStriker', recolor: 0xff7fb0, outline: 0xb0296a, heal: { amount: 2, every: 3, reach: 2 } },
-    jumper: { hp: 6, secPerCell: 3, size: { w: 72, h: 80 }, color: 0x35b5a8, light: 0xc8f5ee, shape: 'swift', artFrom: 'burnShooter', recolor: 0x2fc4b4, outline: 0x0d5a55, hopOver: true },
-    splitter: { hp: 9, secPerCell: 3.25, size: { w: 58, h: 96 }, color: 0xd9544f, light: 0xffd9d0, shape: 'robot', artFrom: 'trainer', recolor: 0xe2453c, outline: 0x7a1414, splitInto: { kind: 'splitling', count: 2 } },
+    bruiser: { hp: 24, secPerCell: 5.5, size: { w: 80, h: 112 }, color: 0x6f7f92, light: 0xcfd8e3, shape: 'plated', artFrom: 'tank', recolor: 0x8596ab, outline: 0x27313d, accessory: 'pads' },
+    healer: { hp: 7, secPerCell: 3.25, size: { w: 62, h: 94 }, color: 0xf08bb4, light: 0xffe0ec, shape: 'stripe', artFrom: 'doubleStriker', recolor: 0xff7fb0, outline: 0xb0296a, accessory: 'cross', heal: { amount: 2, every: 3, reach: 2 } },
+    jumper: { hp: 6, secPerCell: 3, size: { w: 72, h: 80 }, bodyBox: { x: 2, y: 0, w: 68, h: 70 }, color: 0x35b5a8, light: 0xc8f5ee, shape: 'swift', artFrom: 'burnShooter', recolor: 0x2fc4b4, outline: 0x0d5a55, accessory: 'spring', hopOver: true },
+    splitter: { hp: 9, secPerCell: 3.25, size: { w: 58, h: 96 }, color: 0xd9544f, light: 0xffd9d0, shape: 'robot', artFrom: 'trainer', recolor: 0xe2453c, outline: 0x7a1414, accessory: 'twin', splitInto: { kind: 'splitling', count: 2 } },
     splitling: { hp: 3, secPerCell: 2.6, size: { w: 40, h: 66 }, color: 0xf0817a, light: 0xffe4df, shape: 'robot', artFrom: 'trainer', recolor: 0xf26a5e, outline: 0x7a1414, noOrb: true },
     // ===== 第 4～6 關（建議值，尚未實測）=====
-    // accessory＝程式畫的配件（textures.js），bodyBox＝本體在圖框裡的位置（留空間給配件）
+    // accessory＝程式畫的配件（textures.js），bodyBox＝本體在圖框裡的位置（留空間給配件）。
+    // 第 2、3 關的敵人也有「職責配件」（docs/beautify-top5-v1.md 第 4 項）：補補蛙頭上十字、彈跳蜥腳下彈簧、雙胞搗蛋肩上兩顆圓點、鐵甲熊兵與厚殼機器人的肩甲
     // flying：不被任何角色擋住，近戰打不到；throwAt：邊走邊丟球打同路前方的遠攻角色；cloak：顯形／隱身輪流（秒）
     flyer: {
       hp: 4, secPerCell: 3.4, size: { w: 96, h: 84 }, bodyBox: { x: 6, y: 20, w: 84, h: 64 }, color: 0x7fa8ff, light: 0xdce8ff, shape: 'swift',
@@ -256,12 +257,17 @@ window.PD = window.PD || {};
       artFrom: 'trainer', recolor: 0x6a5fd6, outline: 0x2a2470, accessory: 'mask', cloak: { visible: 3, hidden: 2.5 },
     },
     // boss：大血條、不會被推回；entryPause＝登場先站一下；homeCost＝走進村莊算掉幾次救援；orbDrop＝打倒掉幾顆球
+    // art＝專屬貼圖（assets/local-art/<file>.png，宇鋒 2026-11-10 核准公開的鼓鼓隊長 v2，320×384、本來就面朝左、腳底約在 160,368）。
+    //   box＝從原圖取哪一塊（左右以腳底 x＝160 為中心，含整隻不裁切），size＝有貼圖時的畫面大小，recolor＝要不要重新上色。
+    //   缺檔時退回 artFrom 重新上色＋程式配件（下面原本的 size／bodyBox）
     boss: {
+      art: { file: 'boss', box: { x: 14, y: 109, w: 292, h: 265 }, size: { w: 138, h: 125 }, recolor: 0xe08a2a, outline: 0x6a3a06 },
       hp: 80, secPerCell: 9, size: { w: 112, h: 132 }, bodyBox: { x: 12, y: 18, w: 90, h: 114 }, color: 0xd9892b, light: 0xffe2b0, shape: 'plated',
       artFrom: 'tank', recolor: 0xdc8a22, outline: 0x6a3a06, accessory: 'captain', boss: true, entryPause: 0.6,
       contactDamage: 4, homeCost: 2, orbDrop: 3, summon: { kind: 'scout', count: 1, every: 9, maxAlive: 4 }, aura: 0xffb347,
     },
     finalBoss: {
+      art: { file: 'boss', box: { x: 14, y: 109, w: 292, h: 265 }, size: { w: 180, h: 163 } },
       hp: 260, secPerCell: 11, size: { w: 140, h: 164 }, bodyBox: { x: 14, y: 30, w: 116, h: 134 }, color: 0xb13fb0, light: 0xf8d2f4, shape: 'plated',
       artFrom: 'tank', recolor: 0xb83fc0, outline: 0x4a0f58, accessory: 'king', boss: true, entryPause: 0.6,
       contactDamage: 5, homeCost: 4, orbDrop: 3, summon: { kind: 'tough', count: 1, every: 11, maxAlive: 4 }, rally: { every: 18, seconds: 3, factor: 1.3 }, aura: 0xd070ff,
@@ -308,13 +314,19 @@ window.PD = window.PD || {};
     {
       number: 1,
       openLanes: [1, 2, 3, 4],
+      // 主題色票（scenery.js 用程式畫，不產生圖檔）：第 1 關・晴天草原
+      theme: {
+        grassA: ['#9CC77A', '#80AE64'], grassB: ['#8FBD70', '#76A35C'], rest: ['#8d998c', '#79857a'],
+        spawn: ['#5e5680', '#3a3556'], village: ['#d6c698', '#ad9869'], pennants: ['#ff8fb0', '#ffd84a'],
+        warm: '255,244,200', warmAlpha: 0.22, flower: 'flower', flowerChance: 0.45,
+      },
       requiredToStart: ['trainer', 'basicShooter'],
       tutorial: { trainer: { lane: 1, col: 1 }, basicShooter: { lane: 1, col: 6 } },
       // 各關 tune 只影響該關，理由與試玩結果記在 CLAUDE.md「各關目標與結果」
       tune: {
-        skyOrbEvery: 16,
-        genEvery: 16,
-        killOrbEvery: 2,
+        skyOrbEvery: 18,
+        genEvery: 18,
+        killOrbEvery: 3,
         enemies: { scout: { secPerCell: 3.25, hp: 5 } },
       },
       script: makeScript([
@@ -322,17 +334,23 @@ window.PD = window.PD || {};
         { at: 54, gap: 5, kinds: many('scout', 5) },
         { at: 88, gap: 3.5, kinds: many('scout', 7) },
         { at: 124, gap: 2.5, kinds: many('scout', 10) },
-        { at: 162, gap: 0.35, kinds: many('scout', 60) }, // 終局波
+        { at: 162, gap: 0.33, kinds: many('scout', 66) }, // 終局波
       ]),
     },
     {
       number: 2,
       openLanes: [1, 2, 3, 4],
+      // 第 2 關・森林小徑：偏藍的深綠草地、小香菇，出怪區旁有小松樹
+      theme: {
+        grassA: ['#7FB07A', '#649660'], grassB: ['#74A670', '#5A8C58'], rest: ['#86948A', '#74827A'],
+        spawn: ['#4E5E86', '#2F3A5E'], village: ['#CDBB8E', '#A28C60'], pennants: ['#9BE07A', '#FFD84A'],
+        warm: '220,255,210', warmAlpha: 0.16, flower: 'mushroom', flowerChance: 0.3, decor: 'pine',
+      },
       requiredToStart: ['trainer', 'basicShooter'],
       tutorial: { trainer: { lane: 1, col: 1 }, basicShooter: { lane: 1, col: 6 } },
       tune: {
-        skyOrbEvery: 14,
-        genEvery: 14,
+        skyOrbEvery: 16,
+        genEvery: 16,
         killOrbEvery: 2,
         enemies: { scout: { secPerCell: 3.25, hp: 5 }, tough: { secPerCell: 3.25, hp: 8 } },
       },
@@ -341,12 +359,18 @@ window.PD = window.PD || {};
         { at: 52, gap: 5, kinds: ['scout', 'tough', 'scout', 'tough', 'scout'] },
         { at: 88, gap: 3.5, kinds: ['tough', 'scout', 'bruiser', 'scout', 'tough', 'scout', 'bruiser', 'scout'] },
         { at: 124, gap: 2.5, kinds: ['tough', 'healer', 'tough', 'bruiser', 'tough', 'healer', 'tough', 'bruiser', 'tough', 'tough'] },
-        { at: 162, gap: 0.5, kinds: [].concat(...Array(10).fill(['tough', 'bruiser', 'healer', 'tough'])) }, // 終局波
+        { at: 162, gap: 0.45, kinds: loop(['tough', 'bruiser', 'healer', 'tough'], 12) }, // 終局波
       ]),
     },
     {
       number: 3,
       openLanes: [1, 2, 3, 4],
+      // 第 3 關・秋日麥田：黃綠色草地、落葉，出怪區旁有小草堆
+      theme: {
+        grassA: ['#B2C06C', '#93A452'], grassB: ['#A6B662', '#889A4A'], rest: ['#9A9A88', '#848474'],
+        spawn: ['#7A4A6E', '#4C2C48'], village: ['#E6C88E', '#C29E62'], pennants: ['#FFB347', '#FF7F7F'],
+        warm: '255,220,150', warmAlpha: 0.22, path: '236,214,150', flower: 'leaf', flowerChance: 0.38, decor: 'haystack',
+      },
       requiredToStart: ['trainer', 'basicShooter'],
       tutorial: { trainer: { lane: 1, col: 1 }, basicShooter: { lane: 1, col: 6 } },
       tune: {
@@ -363,8 +387,9 @@ window.PD = window.PD || {};
         { at: 16, gap: 6, kinds: ['scout', 'scout', 'tough', 'tough'] },
         { at: 52, gap: 5, kinds: ['runner', 'scout', 'jumper', 'runner', 'jumper'] },
         { at: 88, gap: 3.5, kinds: ['tough', 'splitter', 'bruiser', 'runner', 'jumper', 'splitter', 'healer', 'runner'] },
-        { at: 124, gap: 2.5, kinds: [].concat(...Array(5).fill(['splitter', 'jumper'])) },
-        { at: 162, gap: 0.5, kinds: [].concat(...Array(8).fill(['bruiser', 'splitter', 'jumper', 'healer'])) }, // 終局波
+        { at: 124, gap: 2.5, kinds: loop(['splitter', 'jumper'], 5) },
+        // 終局波：分裂的小隻很多，靠藤芽蛙的範圍藤鞭最有效，只放電電鼠擋不住
+        { at: 162, gap: 0.45, kinds: loop(['splitter', 'jumper', 'bruiser', 'splitter', 'healer'], 7) },
       ]),
     },
     {
@@ -379,14 +404,15 @@ window.PD = window.PD || {};
         spawn: ['#3A5F8A', '#243B5C'], village: ['#E2C39A', '#C4A074'], pennants: ['#FFD84A', '#7FD4FF'],
         warm: '180,220,255', warmAlpha: 0.14, path: '170,200,210', pathAlpha: 0.22, flower: 'reed', flowerChance: 0.22, decor: 'ripple',
       },
-      tune: { skyOrbEvery: 13, genEvery: 13, killOrbEvery: 2, enemies: LATE_ENEMIES },
+      tune: { skyOrbEvery: 15, genEvery: 15, killOrbEvery: 2, enemies: LATE_ENEMIES },
       script: makeScript([
         { at: 16, gap: 5, kinds: ['scout', 'tough', 'scout', 'scout'] },
         { at: 48, gap: 4.5, kinds: ['flyer', 'scout', 'flyer', 'tough', 'scout', 'flyer'] },
         { at: 84, gap: 3.5, kinds: ['lobber', 'tough', 'bruiser', 'flyer', 'lobber', 'healer', 'tough', 'flyer'] },
-        { at: 120, gap: 2.6, kinds: loop(['bruiser', 'flyer', 'lobber', 'tough'], 3) },
+        { at: 120, gap: 2.6, kinds: loop(['bruiser', 'lobber', 'splitter', 'tough'], 3) },
         { at: 158, gap: 3, kinds: loop(['tough', 'flyer', 'healer'], 3), boss: { kind: 'boss', lane: 3 } }, // 隊長波
-        { at: 206, gap: 0.6, kinds: loop(['tough', 'bruiser', 'flyer', 'bruiser', 'lobber'], 6) }, // 終局波
+        // 終局波：小隻多（要範圍藤鞭）、丟丟猴多（只放遠攻會被打掉）
+        { at: 206, gap: 0.36, kinds: loop(['splitter', 'lobber', 'splitter', 'bruiser', 'lobber', 'splitter', 'tough', 'flyer'], 6) },
       ]),
     },
     {
@@ -431,7 +457,7 @@ window.PD = window.PD || {};
         spawn: ['#6B3F7A', '#3E2450'], spawnMist: 'rgba(255,200,230,0.12)', pennants: ['#FF8E6E', '#FFE082'],
         warm: '255,244,200', warmAlpha: 0.2, flower: 'flower', flowerChance: 0.3, decor: 'tent',
       },
-      tune: { skyOrbEvery: 11, genEvery: 11, killOrbEvery: 2, enemies: LATE_ENEMIES },
+      tune: { skyOrbEvery: 12, genEvery: 12, killOrbEvery: 2, enemies: LATE_ENEMIES },
       script: makeScript([
         { at: 16, gap: 4.5, kinds: ['tough', 'flyer', 'scout', 'phantom', 'tough'] },
         { at: 46, gap: 4.2, kinds: ['armored', 'lobber', 'tough', 'flyer', 'splitter', 'phantom'] },
@@ -477,7 +503,7 @@ window.PD = window.PD || {};
       ambientMaxUsed: 110, // 塵土、小火星、水滴這類背景粒子：場上粒子超過這個數就不再新增，把額度留給命中特效
       contactStars: 5,
       hitParticles: 8,
-      starParticles: 24,
+      starParticles: 14, // 打倒時的小星星（原 24，美化提案第 5 項：主星更清楚、周圍不要太密）
       projectileSeconds: 0.14,
       shakeMs: 140,
       shakeIntensity: 0.004,

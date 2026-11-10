@@ -75,6 +75,25 @@ window.PD = window.PD || {};
     c.beginPath(); c.arc(x - 1, y - 1.2, 1, 0, 7); c.fill();
   }
 
+  // 第 2 關的小香菇、第 3 關的落葉
+  function drawMushroom(c, x, y) {
+    c.fillStyle = 'rgba(250,240,220,0.85)'; c.fillRect(x - 1.5, y - 2, 3, 6);
+    c.fillStyle = 'rgba(214,92,76,0.85)';
+    c.beginPath(); c.arc(x, y - 2, 5, Math.PI, 0); c.fill();
+    c.fillStyle = 'rgba(255,255,255,0.8)';
+    c.beginPath(); c.arc(x - 2, y - 4, 1, 0, 7); c.arc(x + 2, y - 3.5, 0.9, 0, 7); c.fill();
+  }
+
+  function drawLeaf(c, x, y, rand) {
+    c.save();
+    c.translate(x, y); c.rotate(rand() * 6.28);
+    c.fillStyle = rand() < 0.5 ? 'rgba(232,140,60,0.75)' : 'rgba(214,92,52,0.7)';
+    c.beginPath(); c.ellipse(0, 0, 5, 2.6, 0, 0, 7); c.fill();
+    c.strokeStyle = 'rgba(120,60,20,0.5)'; c.lineWidth = 0.8;
+    c.beginPath(); c.moveTo(-4, 0); c.lineTo(4, 0); c.stroke();
+    c.restore();
+  }
+
   function drawCell(c, x, y, w, h, open, even, rand, theme) {
     const colors = theme
       ? (open ? (even ? theme.grassA : theme.grassB) : theme.rest)
@@ -104,6 +123,8 @@ window.PD = window.PD || {};
       const kind = theme ? theme.flower : 'flower';
       if (kind === 'reed') drawReed(c, fx, fy);
       else if (kind === 'fruit') drawFruit(c, fx, fy);
+      else if (kind === 'mushroom') drawMushroom(c, fx, fy);
+      else if (kind === 'leaf') drawLeaf(c, fx, fy, rand);
       else drawFlower(c, fx, fy, rand);
     }
 
@@ -429,6 +450,23 @@ window.PD = window.PD || {};
         // 出怪區的水面波紋
         c.strokeStyle = 'rgba(168,216,255,0.25)'; c.lineWidth = 2;
         [0, 1, 2].forEach((k) => { c.beginPath(); c.arc(sx + 30 + k * 26, foot + 14, 10 + k * 3, Math.PI, 0); c.stroke(); });
+      } else if (T.decor === 'pine' && r % 2 === 1) {
+        // 小松樹（矮矮的，不超過旗子）
+        const tx = sx + 60;
+        const ty = top + G.cellH - 12;
+        c.fillStyle = '#5a3a1e'; c.fillRect(tx - 3, ty - 12, 6, 12);
+        [[0, 26], [-14, 20], [-26, 14]].forEach(([dy, hw]) => {
+          poly(c, [[tx - hw, ty - 10 + dy], [tx, ty - 40 + dy], [tx + hw, ty - 10 + dy]]);
+          c.fillStyle = '#3f7a4a'; c.fill(); c.lineWidth = 2; c.strokeStyle = '#1c3a24'; c.stroke();
+        });
+      } else if (T.decor === 'haystack' && r % 2 === 0) {
+        // 圓圓的小草堆
+        const tx = sx + 56;
+        const ty = top + G.cellH - 14;
+        c.beginPath(); c.ellipse(tx, ty - 14, 26, 18, 0, Math.PI, 0); c.lineTo(tx + 26, ty); c.lineTo(tx - 26, ty); c.closePath();
+        c.fillStyle = '#e8c766'; c.fill(); c.lineWidth = 2.5; c.strokeStyle = '#5a4416'; c.stroke();
+        c.strokeStyle = 'rgba(140,100,30,0.6)'; c.lineWidth = 1.5;
+        [-12, 0, 12].forEach((d) => { c.beginPath(); c.moveTo(tx + d, ty - 26 + Math.abs(d) * 0.4); c.lineTo(tx + d * 1.2, ty - 2); c.stroke(); });
       } else if (T.decor === 'tent' && r % 2 === 0) {
         // 低矮的三角帳篷（高度不超過旗子）
         const tx = sx + 56;
@@ -482,7 +520,7 @@ window.PD = window.PD || {};
     // 卡片與按鈕下方的落影
     c.fillStyle = 'rgba(8,16,12,0.34)';
     const C = L.cards;
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < PD.config.cardOrder.length; i++) {
       rr(c, C.x + i * (C.w + C.gap) + 2, C.y + 5, C.w, C.h, 18); c.fill();
     }
     [L.recallBtn, L.cancelBtn].forEach((b) => { rr(c, b.x + 2, b.y + 5, b.w, b.h, 18); c.fill(); });
@@ -507,7 +545,7 @@ window.PD = window.PD || {};
     scene.textures.addCanvas(key || 'bg', canvas);
   };
 
-  // 戰鬥用的背景：沒有主題的關卡（第 1～3 關）共用開場畫好的 'bg'；
+  // 戰鬥用的背景：沒有主題的關卡共用開場畫好的 'bg'（2026-11-10 起六關都有主題）；
   // 有主題的關卡另畫一張，只留目前這一關的，換關時先刪掉上一張，iPad 記憶體不會越用越多
   PD.levelBackground = function (scene, cfg, level) {
     if (!level.theme) return 'bg';
@@ -518,6 +556,54 @@ window.PD = window.PD || {};
       PD.bgLevelNumber = level.number;
     }
     return key;
+  };
+
+  // ===== 大地圖選關的底圖（docs/beautify-top5-v1.md 第 2 項）：夜空、星星、三層遠山、左下的小村莊、右下的搗蛋團帳篷 =====
+  // 開場畫一次、之後是靜態圖；亂數有固定種子
+  PD.buildMapBackground = function (scene, cfg) {
+    const L = cfg.layout;
+    const W = L.width;
+    const H = L.height;
+    const { canvas, c } = newCanvas(W, H);
+    const rand = makeRand(20261110);
+    c.fillStyle = vGrad(c, 0, H, ['#1B2E44', '#22384A', '#314D3A']);
+    c.fillRect(0, 0, W, H);
+    // 星星（大小不同，不會閃）
+    for (let i = 0; i < 90; i++) {
+      const x = rand() * W;
+      const y = rand() * H * 0.55;
+      c.fillStyle = `rgba(255,250,225,${0.25 + rand() * 0.55})`;
+      c.beginPath(); c.arc(x, y, 0.7 + rand() * 1.5, 0, 7); c.fill();
+    }
+    // 月亮：柔光加一個圓
+    softCircle(c, 1060, 120, 120, '255,240,190', 0.22);
+    c.fillStyle = '#fff3c4';
+    c.beginPath(); c.arc(1060, 120, 30, 0, 7); c.fill();
+    c.fillStyle = 'rgba(230,214,160,0.55)';
+    [[1050, 112, 6], [1072, 128, 4], [1056, 134, 3]].forEach((p) => { c.beginPath(); c.arc(p[0], p[1], p[2], 0, 7); c.fill(); });
+    // 三層遠山：由遠到近、由暗到亮
+    [['#3A5A4A', 0.5, 150, 7], ['#4E6F58', 0.66, 120, 6], ['#6A8B66', 0.82, 96, 5]].forEach(([color, base, amp, n]) => {
+      c.fillStyle = color;
+      for (let i = 0; i <= n; i++) {
+        const x = (i / n) * W + (rand() - 0.5) * 80;
+        c.beginPath(); c.ellipse(x, H * base + amp * 0.6, 150 + rand() * 90, amp + rand() * 40, 0, 0, 7); c.fill();
+      }
+      c.fillRect(0, H * base + amp * 0.6, W, H);
+    });
+    // 地面上的小草點
+    for (let i = 0; i < 70; i++) {
+      c.fillStyle = rand() < 0.5 ? 'rgba(200,230,170,0.16)' : 'rgba(20,40,24,0.16)';
+      c.beginPath(); c.ellipse(rand() * W, H * 0.72 + rand() * H * 0.28, 4 + rand() * 8, 2 + rand() * 3, 0, 0, 7); c.fill();
+    }
+    // 左下的小村莊（旅程的起點），只是剪影，不擋住關卡
+    [[52, 786, '#ec9a7c'], [106, 798, '#83b6ea']].forEach(([x, y, roof]) => {
+      c.fillStyle = '#e8d8b4'; c.fillRect(x - 20, y - 26, 40, 26);
+      poly(c, [[x - 27, y - 24], [x, y - 50], [x + 27, y - 24]]); c.fillStyle = roof; c.fill();
+      c.lineWidth = 2; c.strokeStyle = OUTLINE; c.stroke(); c.strokeRect(x - 20, y - 26, 40, 26);
+      softCircle(c, x + 8, y - 14, 12, '255,226,140', 0.6);
+      c.fillStyle = '#ffe9a0'; c.fillRect(x + 3, y - 19, 10, 10);
+    });
+    scene.textures.addCanvas('mapBg', canvas);
   };
 
   // 暫停、勝利、失敗共用的大面板；太大放不進合併大圖，自己一張

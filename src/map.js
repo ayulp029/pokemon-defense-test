@@ -1,4 +1,5 @@
 // 大地圖選關：過關解鎖下一關，已過的關卡可以重玩。只用程式畫的圖形與現有卡片圖。
+// 外觀依 docs/beautify-top5-v1.md 第 2 項：夜空遠山底圖、木頭小路、木牌關卡名、最後一關較大並插隊旗。
 window.PD = window.PD || {};
 
 PD.MapScene = class MapScene extends Phaser.Scene {
@@ -11,53 +12,66 @@ PD.MapScene = class MapScene extends Phaser.Scene {
     const cfg = PD.config;
     const L = cfg.layout;
     const M = L.map;
-    this.add.image(0, 0, 'bg').setOrigin(0).setScale(PD.TEX_SCALE);
-    this.add.image(L.width / 2, L.height / 2, 'atlas', 'white')
-      .setDisplaySize(L.width + 40, L.height + 40).setTint(0x101a24).setAlpha(0.45);
+    this.add.image(0, 0, 'mapBg').setOrigin(0).setScale(PD.TEX_SCALE);
 
     PD.txt(this, L.width / 2, 62, PD.text.mapTitle, 54, '#ffe9a8', 7);
     PD.txt(this, L.width / 2, 124, PD.text[this.modeId === 'together' ? 'modeTogether' : 'modeSolo'], 30);
 
     this.drawPath(M.nodes);
-    this.nodes = cfg.levels.map((level, i) => this.drawNode(level, M.nodes[i], M.nodeHit));
+    const last = cfg.levels.length;
+    this.nodes = cfg.levels.map((level, i) => this.drawNode(level, M.nodes[i], M.nodeHit, level.number === last));
 
     const B = M.backBtn;
-    PD.img(this, B.x + B.w / 2, B.y + B.h / 2, 'btnWide').setDisplaySize(B.w, B.h);
-    PD.txt(this, B.x + B.w / 2, B.y + B.h / 2, PD.text.changeMode, 30, '#3a2a10', 0);
+    this.backBg = PD.img(this, B.x + B.w / 2, B.y + B.h / 2, 'btnWide').setDisplaySize(B.w, B.h);
+    this.backText = PD.txt(this, B.x + B.w / 2, B.y + B.h / 2, PD.text.changeMode, 30, '#3a2a10', 0);
 
     this.hint = PD.txt(this, L.width / 2, 760, '', 32);
     // 用 pointerdown：從戰鬥畫面按「回地圖」時手指還沒放開，不會誤觸地圖上的關卡
     this.input.on('pointerdown', (p) => this.onTap(p.x / PD.RES, p.y / PD.RES));
   }
 
+  // 小路：深色外緣、淺色路面，中間一排小石頭
   drawPath(points) {
     const g = this.add.graphics();
     const curve = new Phaser.Curves.Spline(points.map((p) => new Phaser.Math.Vector2(p.x, p.y)));
-    g.lineStyle(44, 0x8a6a3a, 0.9);
-    curve.draw(g, 64);
+    g.lineStyle(52, 0x0f1a24, 0.35);
+    curve.draw(g, 96);
+    g.lineStyle(44, 0x8a6a3a, 1);
+    curve.draw(g, 96);
     g.lineStyle(32, 0xe2c98f, 1);
-    curve.draw(g, 64);
+    curve.draw(g, 96);
     g.fillStyle(0x8a6a3a, 0.9);
-    curve.getSpacedPoints(26).forEach((p) => g.fillCircle(p.x, p.y, 4));
+    curve.getSpacedPoints(40).forEach((p) => g.fillCircle(p.x, p.y, 4));
   }
 
-  drawNode(level, at, hit) {
+  drawNode(level, at, hit, isLast) {
     const open = PD.Progress.isUnlocked(this.modeId, level.number);
     const done = PD.Progress.isCleared(this.modeId, level.number);
     const fill = !open ? 0x7d8794 : done ? 0x58b86a : 0xffcf5a;
     const rect = { x: at.x - hit / 2, y: at.y - hit / 2, w: hit, h: hit };
+    const R = isLast ? 100 : 88; // 最後一關的圓鈕大一圈
 
     if (open && !done) {
       const glow = this.add.image(at.x, at.y, 'atlas', 'glow').setBlendMode(Phaser.BlendModes.ADD)
-        .setTint(0xffd84a).setScale(4.2 * PD.TEX_SCALE).setAlpha(0.5);
+        .setTint(0xffd84a).setScale((R / 88) * 4.2 * PD.TEX_SCALE).setAlpha(0.5);
       this.tweens.add({ targets: glow, alpha: 0.2, duration: 800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     }
     const g = this.add.graphics();
-    g.fillStyle(0x1f2a38, 1).fillCircle(at.x, at.y, 88);
-    g.fillStyle(fill, 1).fillCircle(at.x, at.y, 78);
-    g.fillStyle(0xffffff, 0.25).fillEllipse(at.x, at.y - 40, 96, 40);
+    if (isLast) this.drawFlag(g, at.x + R * 0.82, at.y - R * 0.5);
+    g.fillStyle(0x0f1a24, 0.35).fillCircle(at.x + 3, at.y + 6, R);
+    g.fillStyle(0x1f2a38, 1).fillCircle(at.x, at.y, R);
+    g.fillStyle(fill, 1).fillCircle(at.x, at.y, R - 10);
+    g.fillStyle(0x000000, 0.12).fillCircle(at.x + 6, at.y + 8, R - 22);
+    g.fillStyle(fill, 1).fillCircle(at.x - 2, at.y - 2, R - 24);
+    g.fillStyle(0xffffff, 0.25).fillEllipse(at.x, at.y - R * 0.45, R * 1.1, R * 0.45);
 
-    PD.txt(this, at.x, at.y - (open ? 26 : 34), PD.text.levelLabel(level.number), 34, '#2a2a2a', 0);
+    // 木牌：關卡名寫在圓鈕上方的小木板上
+    const wy = at.y - R + 6;
+    g.fillStyle(0x1f2a38, 1).fillRoundedRect(at.x - 70, wy - 24, 140, 48, 12);
+    g.fillStyle(0xa77a45, 1).fillRoundedRect(at.x - 67, wy - 21, 134, 42, 10);
+    g.fillStyle(0xc89a5e, 1).fillRoundedRect(at.x - 67, wy - 21, 134, 18, { tl: 10, tr: 10, bl: 0, br: 0 });
+    g.fillStyle(0x6a4a26, 0.6).fillRect(at.x - 60, wy + 4, 120, 2);
+    PD.txt(this, at.x, wy, PD.text.levelLabel(level.number), 30, '#fff4dc', 4);
     if (!open) {
       PD.img(this, at.x, at.y + 22, 'lock').setTint(0xf0f4f8);
       return { level, rect, open };
@@ -65,27 +79,41 @@ PD.MapScene = class MapScene extends Phaser.Scene {
     if (done) {
       g.lineStyle(14, 0xffffff, 1);
       g.beginPath();
-      g.moveTo(at.x - 32, at.y + 22);
-      g.lineTo(at.x - 8, at.y + 44);
-      g.lineTo(at.x + 36, at.y - 2);
+      g.moveTo(at.x - 32, at.y + 14);
+      g.lineTo(at.x - 8, at.y + 36);
+      g.lineTo(at.x + 36, at.y - 10);
       g.strokePath();
-      PD.txt(this, at.x, at.y + 112, PD.text.levelCleared, 26, '#c9f5d0');
+      PD.txt(this, at.x, at.y + R + 24, PD.text.levelCleared, 26, '#c9f5d0');
       return { level, rect, open };
     }
     // 這一關第一次出現的朋友，用現有的卡片圖
     const fresh = PD.config.cardOrder.filter((k) => PD.config.units[k].unlock === level.number);
     fresh.forEach((k, i) => {
-      PD.img(this, at.x + (i - (fresh.length - 1) / 2) * 62, at.y + 32, 'cardPic_' + k).setScale(PD.TEX_SCALE * 0.72);
+      PD.img(this, at.x + (i - (fresh.length - 1) / 2) * 62, at.y + 24, 'cardPic_' + k).setScale(PD.TEX_SCALE * 0.72);
     });
-    PD.txt(this, at.x, at.y + 112, PD.text.newFriend + '：' + fresh.map((k) => PD.names[k]).join('、'), 24, '#ffe9a8');
+    PD.txt(this, at.x, at.y + R + 24, PD.text.newFriend + '：' + fresh.map((k) => PD.names[k]).join('、'), 24, '#ffe9a8');
     return { level, rect, open };
+  }
+
+  // 最後一關的小隊旗：旗桿加三角旗，旗上是搗蛋團的歪菱形隊徽（不是文字或字母）
+  drawFlag(g, x, y) {
+    g.fillStyle(0x1f2a38, 1).fillRect(x - 3, y - 74, 7, 86);
+    g.fillStyle(0xd8d2e8, 1).fillRect(x - 1, y - 72, 3, 82);
+    g.fillStyle(0x1f2a38, 1).fillTriangle(x + 2, y - 76, x + 68, y - 52, x + 2, y - 26);
+    g.fillStyle(0xff8e6e, 1).fillTriangle(x + 4, y - 71, x + 60, y - 52, x + 4, y - 31);
+    const cx = x + 24;
+    const cy = y - 51;
+    g.fillStyle(0x1f2a38, 1).fillPoints([{ x: cx, y: cy - 12 }, { x: cx + 11, y: cy - 1 }, { x: cx + 1, y: cy + 12 }, { x: cx - 11, y: cy + 1 }], true);
+    g.fillStyle(0xffe082, 1).fillPoints([{ x: cx, y: cy - 8 }, { x: cx + 7, y: cy - 1 }, { x: cx + 1, y: cy + 8 }, { x: cx - 7, y: cy + 1 }], true);
+    g.fillStyle(0xffe082, 1).fillCircle(x + 1, y - 77, 5);
   }
 
   onTap(x, y) {
     const M = PD.config.layout.map;
     if (PD.hitRect(M.backBtn, x, y)) {
       PD.Sound.play('tap');
-      this.scene.start('Start');
+      PD.press(this, this.backBg, [this.backText]);
+      this.time.delayedCall(90, () => this.scene.start('Start'));
       return;
     }
     const node = this.nodes.find((n) => PD.hitRect(n.rect, x, y));

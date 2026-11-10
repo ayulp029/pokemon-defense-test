@@ -14,6 +14,9 @@ PD.BootScene = class BootScene extends Phaser.Scene {
     // 用 artFrom 重新上色的敵人沒有自己的檔案，不用載入
     [...PD.config.cardOrder.filter((k) => !PD.config.units[k].noArt), ...Object.keys(PD.config.enemies).filter((k) => !PD.config.enemies[k].artFrom)]
       .forEach((k) => this.load.image('art_' + k, 'assets/local-art/' + k + '.png'));
+    // 敵人的專屬貼圖（頭目 boss.png）：缺檔時載入失敗就略過，退回重新上色的圖
+    const own = new Set(Object.values(PD.config.enemies).filter((d) => d.art).map((d) => d.art.file));
+    own.forEach((f) => { if (!this.textures.exists('art_' + f)) this.load.image('art_' + f, 'assets/local-art/' + f + '.png'); });
     // 待機動畫只載入事先確認存在的檔案（見下方 probeIdleSheets）
     Object.keys(PD.idleSheetFound).forEach((k) => {
       this.load.image('idle_' + k, 'assets/local-art/' + PD.config.units[k].idleSheet.file + '.png');
@@ -21,9 +24,15 @@ PD.BootScene = class BootScene extends Phaser.Scene {
   }
 
   create() {
+    // 有專屬貼圖的敵人：畫面大小換成貼圖的比例（只影響外觀，規則不看大小）
+    Object.values(PD.config.enemies).forEach((d) => {
+      d.ownArt = !!(d.art && this.textures.exists('art_' + d.art.file));
+      if (d.ownArt) d.size = d.art.size;
+    });
     PD.buildAtlas(this, PD.config);
     PD.buildBackground(this, PD.config, PD.config.levels[0]);
     PD.buildPanel(this);
+    PD.buildMapBackground(this, PD.config);
     this.scene.start('Start');
   }
 };
@@ -44,11 +53,16 @@ PD.StartScene = class StartScene extends Phaser.Scene {
     PD.txt(this, L.width / 2, 420, PD.text.tapToStart, 30, '#ffffff');
 
     const button = (r, label) => {
-      PD.img(this, r.x + r.w / 2, r.y + r.h / 2, 'btnBig');
-      PD.txt(this, r.x + r.w / 2, r.y + r.h / 2, label, 40, '#3a2a10', 0);
+      const bg = PD.img(this, r.x + r.w / 2, r.y + r.h / 2, 'btnBig');
+      const t = PD.txt(this, r.x + r.w / 2, r.y + r.h / 2, label, 40, '#3a2a10', 0);
+      return { r, bg, t };
     };
-    button(L.start.together, PD.text.modeTogether);
-    button(L.start.solo, PD.text.modeSolo);
+    const btns = [button(L.start.together, PD.text.modeTogether), button(L.start.solo, PD.text.modeSolo)];
+    // 手指一按下就顯示按下去的樣子；換畫面仍在手指離開時
+    this.input.on('pointerdown', (p) => {
+      const b = btns.find((o) => PD.hitRect(o.r, p.x / PD.RES, p.y / PD.RES));
+      if (b) PD.press(this, b.bg, [b.t]);
+    });
 
     // iOS：在手指離開螢幕的那一刻解鎖聲音
     const unlock = () => {

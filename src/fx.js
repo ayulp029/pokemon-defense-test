@@ -104,8 +104,9 @@ PD.Fx = class Fx {
     this.burst('star', x, y, 0xffe36b, this.cfg.fx.contactStars, 120, 0.3, 0.45, 0.1, 120);
   }
 
+  // 單點柔光（不是全畫面）；減少特效時亮度最多 0.55
   glowPop(x, y, color, size, life) {
-    this.emit('glow', x, y, color, { vx: 0, vy: 0, life, s0: size, s1: size * 1.5, a: 0.8 });
+    this.emit('glow', x, y, color, { vx: 0, vy: 0, life, s0: size, s1: size * 1.5, a: this.reduced ? 0.55 : 0.8 });
   }
 
   fire(fx, x0, y0, view, big) {
@@ -127,10 +128,11 @@ PD.Fx = class Fx {
     shot.glow.setPosition(x0, y0).setTint(color).setScale((isVine ? 0.02 : big ? 1.6 : 0.9) * PD.TEX_SCALE).setAlpha(0.8).setVisible(!isVine);
   }
 
+  // 命中：單點柔光加一小撮粒子，不疊全畫面白光；減少特效時粒子由 amount() 自動變少
   impact(fx, x, y) {
     const color = PD.Fx.COLORS[fx];
     const n = this.cfg.fx.hitParticles;
-    this.glowPop(x, y, color, 0.7, 0.18);
+    this.glowPop(x, y, color, this.reduced ? 0.55 : 0.7, 0.18);
     if (fx === 'lightning') this.burst('spark', x, y, 0xfff176, n, 200, 0.28, 0.7, 0.1);
     if (fx === 'fire') this.burst('spark', x, y, 0xff8a3c, n, 150, 0.4, 0.8, 0.1, -60);
     if (fx === 'water') this.burst('dropP', x, y, 0x7fd4ff, n, 170, 0.42, 0.6, 0.2, 380);
@@ -139,17 +141,35 @@ PD.Fx = class Fx {
     if (fx === 'lob') this.burst('star', x, y, 0xffe36b, Math.round(n * 0.6), 120, 0.35, 0.5, 0.1, 120);
   }
 
-  // big：隊長變成更大的星星（美術設定 s0＝2.8）
+  // 敵人被打倒變成星星（docs/beautify-top5-v1.md 第 5 項）：一顆大主星往上飛、一圈光環、少量小星星。
+  // 減少特效時「少而大」：只留主星與光環（加 2 顆小星），節奏一樣清楚。big：隊長的主星更大（s0＝2.8）
   starBurst(x, y, big) {
-    const star = this.freeParticles.length ? 1 : 0;
-    if (star) {
-      this.emit('star', x, y, 0xffe36b, {
-        vx: 200, vy: -340, g: 120, life: big ? 1.1 : 0.75, s0: big ? 2.8 : 2.2, s1: 1.1, spin: 9,
-      });
+    // 主星最重要：粒子池滿了也先收回一顆舊的給它用
+    if (!this.freeParticles.length) this.recycleOldest();
+    this.emit('star', x, y, 0xffe36b, {
+      vx: 160, vy: -320, g: 120, life: big ? 1.1 : 0.85, s0: big ? 2.8 : 2.3, s1: 1.1, spin: 6,
+    });
+    this.emit('ring', x, y, 0xfff4b0, { vx: 0, vy: 0, life: 0.4, s0: 0.3, s1: big ? 2.2 : 1.7, a: this.reduced ? 0.7 : 0.85 });
+    if (this.reduced) {
+      this.burst('star', x, y, 0xffe36b, 2, 180, 0.45, 0.6, 0.1, 160);
+      return;
     }
-    this.emit('ring', x, y, 0xfff4b0, { vx: 0, vy: 0, life: 0.4, s0: 0.3, s1: 1.7, a: 0.85 });
     this.glowPop(x, y, 0xffe36b, 1.1, 0.3);
-    this.burst('star', x, y, 0xffe36b, this.cfg.fx.starParticles, 260, 0.55, 0.7, 0.1, 160);
+    this.burst('star', x, y, 0xffe36b, this.cfg.fx.starParticles, 240, 0.55, 0.7, 0.1, 160);
+  }
+
+  // 收回最快結束的那顆粒子（只在主星沒位子時用）
+  recycleOldest() {
+    let best = -1;
+    let left = Infinity;
+    for (let i = 0; i < this.particles.length; i++) {
+      const p = this.particles[i];
+      if (p.on && p.max - p.life < left) { left = p.max - p.life; best = i; }
+    }
+    if (best < 0) return;
+    this.particles[best].on = false;
+    this.particles[best].img.setVisible(false);
+    this.freeParticles.push(best);
   }
 
   landPuff(x, y, color) {

@@ -67,9 +67,9 @@ PD.TEX_SCALE = 1 / PD.RES;
     return cv;
   }
 
-  // 用已公開的貼圖做出新敵人：整張換色、加上一圈描邊、左右翻轉成面朝左。
+  // 用已公開的貼圖做出新敵人：整張換色、加上一圈描邊、左右翻轉成面朝左（keepFacing＝原圖已面朝左，不翻）。
   // 全程用瀏覽器合成模式（iPad Safari 不支援 canvas 的 filter），不產生圖檔。
-  function drawRecolored(ctx, w, h, art, def) {
+  function drawRecolored(ctx, w, h, art, def, keepFacing) {
     const make = () => {
       const cv = document.createElement('canvas');
       cv.width = Math.ceil(w * DENSITY);
@@ -93,8 +93,7 @@ PD.TEX_SCALE = 1 / PD.RES;
     edge.c.fillStyle = hex(def.outline);
     edge.c.fillRect(0, 0, w, h);
     ctx.save();
-    ctx.translate(w, 0);
-    ctx.scale(-1, 1);
+    if (!keepFacing) { ctx.translate(w, 0); ctx.scale(-1, 1); }
     for (let a = 0; a < 8; a++) {
       ctx.drawImage(edge.cv, Math.cos(a * Math.PI / 4) * 2, Math.sin(a * Math.PI / 4) * 2, w, h);
     }
@@ -258,6 +257,55 @@ PD.TEX_SCALE = 1 / PD.RES;
 
   // ===== 新敵人的程式配件（不產生圖檔）。back＝畫在本體後面，front＝畫在前面；面朝左 =====
   const accessories = {
+    // 補補蛙：頭頂淡粉紅十字（醫藥記號）
+    cross: {
+      front(c, w, h) {
+        const x = w * 0.5;
+        const y = h * 0.11;
+        const a = w * 0.14;
+        const b = w * 0.055;
+        poly(c, [[x - b, y - a], [x + b, y - a], [x + b, y - b], [x + a, y - b], [x + a, y + b], [x + b, y + b],
+          [x + b, y + a], [x - b, y + a], [x - b, y + b], [x - a, y + b], [x - a, y - b], [x - b, y - b]]);
+        c.fillStyle = '#FFE0EC'; c.fill(); c.lineWidth = 2; c.strokeStyle = '#B0296A'; c.stroke();
+      },
+    },
+    // 彈跳蜥：腳底兩個薄荷色彈簧
+    spring: {
+      front(c, w, h) {
+        [w * 0.36, w * 0.62].forEach((x) => {
+          c.lineWidth = 2; c.strokeStyle = OUTLINE;
+          for (let i = 0; i < 3; i++) {
+            c.beginPath(); c.ellipse(x, h - 4 - i * 3.2, w * 0.075, 2.2, 0, 0, 7);
+            c.fillStyle = '#C8F5EE'; c.fill(); c.stroke();
+          }
+        });
+      },
+    },
+    // 雙胞搗蛋：肩上兩顆圓點，暗示會分成兩隻
+    twin: {
+      front(c, w, h) {
+        [[w * 0.18, '#fff4f0'], [w * 0.82, '#ffd0c4']].forEach(([x, col]) => {
+          c.beginPath(); c.arc(x, h * 0.36, w * 0.13, 0, 7);
+          c.fillStyle = col; c.fill(); c.lineWidth = 2.5; c.strokeStyle = '#7a1414'; c.stroke();
+          c.fillStyle = '#e2453c';
+          c.beginPath(); c.arc(x, h * 0.36, w * 0.05, 0, 7); c.fill();
+        });
+      },
+    },
+    // 鐵甲熊兵、厚殼機器人：半透明的寬肩甲帶
+    pads: {
+      front(c, w, h) {
+        c.save();
+        c.globalAlpha = 0.55;
+        [[w * 0.06, -0.2], [w * 0.68, 0.2]].forEach(([x, tilt]) => {
+          c.save(); c.translate(x + w * 0.13, h * 0.62); c.rotate(tilt);
+          rr(c, -w * 0.15, -h * 0.05, w * 0.3, h * 0.1, 5);
+          c.fillStyle = '#C2C9D6'; c.fill(); c.lineWidth = 2; c.strokeStyle = OUTLINE; c.stroke();
+          c.restore();
+        });
+        c.restore();
+      },
+    },
     wings: {
       back(c, w, h) {
         [[w * 0.6, -0.55], [w * 0.42, 0.45]].forEach(([x, tilt], i) => {
@@ -389,6 +437,12 @@ PD.TEX_SCALE = 1 / PD.RES;
     c.beginPath(); c.arc(m, m, 35, 0, 7); c.stroke();
   }
 
+  // 顏色暗一階（按下去的按鈕）
+  function shade(h) {
+    const n = parseInt(h.slice(1), 16);
+    return 'rgb(' + [n >> 16, (n >> 8) & 255, n & 255].map((v) => Math.round(v * 0.84)).join(',') + ')';
+  }
+
   // 把顏色往灰色拉（冷卻中的底色）
   function desaturate(h) {
     const n = parseInt(h.slice(1), 16);
@@ -457,7 +511,9 @@ PD.TEX_SCALE = 1 / PD.RES;
   };
 
   // 按鈕與卡片共用的底：漸層、外框、上方亮面、下方厚度、內側細線
-  function drawPanelBase(c, w, h, top, bottom) {
+  // down＝按下去的樣子：整塊往下 4、顏色暗一階、底部厚度變薄（docs/beautify-top5-v1.md 第 1 項）
+  function drawPanelBase(c, w, h, top, bottom, down) {
+    if (down) { c.translate(0, 4); h -= 4; }
     rr(c, 3, 3, w - 6, h - 6, 18);
     const g = c.createLinearGradient(0, 0, 0, h);
     g.addColorStop(0, top); g.addColorStop(1, bottom);
@@ -468,7 +524,7 @@ PD.TEX_SCALE = 1 / PD.RES;
     gloss.addColorStop(0, 'rgba(255,255,255,0.38)');
     gloss.addColorStop(1, 'rgba(255,255,255,0)');
     c.fillStyle = gloss; c.fillRect(0, 0, w, h * 0.45);
-    c.fillStyle = 'rgba(30,20,10,0.16)'; c.fillRect(0, h - 11, w, 11);
+    c.fillStyle = 'rgba(30,20,10,0.16)'; c.fillRect(0, h - (down ? 5 : 11), w, down ? 5 : 11);
     c.restore();
     rr(c, 7, 7, w - 14, h - 14, 14);
     c.lineWidth = 1.5; c.strokeStyle = 'rgba(255,255,255,0.4)'; c.stroke();
@@ -578,9 +634,11 @@ PD.TEX_SCALE = 1 / PD.RES;
     add('shield', 26, 30, (c) => { c.strokeStyle = OUTLINE; c.lineWidth = 2; c.translate(0, 15); icons.shield(c, 13, 13, '#7fd0ff'); });
     add('shieldUsed', 26, 30, (c) => { c.strokeStyle = 'rgba(255,255,255,0.4)'; c.lineWidth = 2; c.translate(0, 15); icons.shield(c, 13, 13, 'rgba(255,255,255,0.14)'); });
 
-    const btnFrame = (name, w, h, top, bottom) => add(name, w, h, (c) => {
-      drawPanelBase(c, w, h, top, bottom);
-    });
+    // 每顆按鈕都有一般與按下兩張（name、name + 'Down'），按下的顏色暗一階
+    const btnFrame = (name, w, h, top, bottom, downTop, downBottom) => {
+      add(name, w, h, (c) => drawPanelBase(c, w, h, top, bottom));
+      add(name + 'Down', w, h, (c) => drawPanelBase(c, w, h, downTop || shade(top), downBottom || shade(bottom), true));
+    };
     // 每位角色一張底卡：上方是角色主色的頭像窗，下方是放名字的白色名牌
     Object.keys(cfg.units).forEach((k) => {
       const d = cfg.units[k];
@@ -597,8 +655,8 @@ PD.TEX_SCALE = 1 / PD.RES;
       });
     });
     btnFrame('btnSquare', cfg.layout.muteBtn.w, cfg.layout.muteBtn.h, '#5a7a9a', '#3c566f');
-    btnFrame('btnBig', 260, 130, '#ffcf5a', '#f09a2e');
-    btnFrame('btnWide', 300, 92, '#ffcf5a', '#f09a2e');
+    btnFrame('btnBig', 260, 130, '#ffcf5a', '#f09a2e', '#e0a63a', '#c97a20');
+    btnFrame('btnWide', 300, 92, '#ffcf5a', '#f09a2e', '#e0a63a', '#c97a20');
     btnFrame('cardLocked', cfg.layout.cards.w, 120, '#8d97a3', '#6a7480');
     btnFrame('cancel', 120, 120, '#f0a0a0', '#d06a6a');
     btnFrame('recall', 136, 120, '#8fd0c8', '#4f9c94');
@@ -612,6 +670,11 @@ PD.TEX_SCALE = 1 / PD.RES;
       c.beginPath(); c.moveTo(18, 14); c.lineTo(36, 14); c.arc(36, 27, 13, -Math.PI / 2, Math.PI / 2); c.lineTo(22, 40); c.stroke();
       c.beginPath(); c.moveTo(20, 4); c.lineTo(8, 14); c.lineTo(20, 24); c.stroke();
     });
+    // 卡片可買時的亮邊、買不起時蓋在名牌上的灰底（都是白色，遊戲中再上色）
+    add('cardEdge', cfg.layout.cards.w, 120, (c) => {
+      c.strokeStyle = '#fff'; c.lineWidth = 5; rr(c, 3.5, 3.5, cfg.layout.cards.w - 7, 113, 18); c.stroke();
+    });
+    add('cardPlate', cfg.layout.cards.w - 18, 23, (c) => { c.fillStyle = '#fff'; rr(c, 0, 0, cfg.layout.cards.w - 18, 23, 8); c.fill(); });
     add('cardGlow', 148, 132, (c) => {
       c.strokeStyle = '#fff'; c.lineWidth = 7; rr(c, 6, 6, 136, 120, 20); c.stroke();
     });
@@ -667,6 +730,15 @@ PD.TEX_SCALE = 1 / PD.RES;
     });
     Object.keys(cfg.enemies).forEach((k) => {
       const d = cfg.enemies[k];
+      // 頭目的專屬貼圖：整隻取進來（box 已含整隻），腳底對齊下緣；圖上已有帽子、斗篷和鼓，不再加程式配件
+      if (d.ownArt) {
+        const own = cropArt(scene.textures.get('art_' + d.art.file).getSourceImage(), d.art.box);
+        add('enemy_' + k, d.size.w, d.size.h, (c) => {
+          if (d.art.recolor) drawRecolored(c, d.size.w, d.size.h, own, d.art, true);
+          else drawArt(c, d.size.w, d.size.h, own);
+        });
+        return;
+      }
       const key = 'art_' + (d.artFrom || k);
       const art = scene.textures.exists(key) ? scene.textures.get(key).getSourceImage() : null;
       add('enemy_' + k, d.size.w, d.size.h, (c) => {
