@@ -47,6 +47,11 @@ PD.Overlay = class Overlay {
     this.title = PD.txt(scene, this.cx, 280, '', 60, '#ffe9a8', 7);
     this.msg = PD.txt(scene, this.cx, 368, '', 32);
     this.c.add([this.dim, this.panel, this.title, this.msg]);
+    // 勝利畫面的星星（其他畫面不顯示）
+    this.stars = [0, 1, 2].map((i) => PD.img(scene, this.cx + (i - 1) * 84, 330, 'rankStar').setScale(PD.TEX_SCALE * 1.1).setVisible(false));
+    this.starNote = PD.txt(scene, this.cx + 240, 330, '', 26, '#ffe9a8');
+    this.c.add(this.stars.concat(this.starNote));
+    this.starCount = 0;
     this.btns = [];
     for (let i = 0; i < 4; i++) {
       const bg = PD.img(scene, 0, 0, 'btnWide');
@@ -56,15 +61,29 @@ PD.Overlay = class Overlay {
     }
   }
 
-  show(title, msg, buttons) {
+  // opts.stars：1～3 顯示星星列（勝利畫面）；opts.note：星星旁的小字
+  show(title, msg, buttons, opts) {
     this.title.setText(title);
     this.msg.setText(msg || '');
+    const starCount = (opts && opts.stars) || 0;
+    this.starCount = starCount;
+    this.stars.forEach((st, i) => {
+      st.setVisible(starCount > 0).setFrame(i < starCount ? 'rankStar' : 'rankStarEmpty');
+      this.scene.tweens.killTweensOf(st);
+      st.setScale(PD.TEX_SCALE * 1.1).setAngle(0);
+      // 拿到的星星一顆一顆輕輕跳出來（真實時間，覆蓋畫面時戰鬥已停）
+      if (starCount > 0 && i < starCount && !PD.settings.reduceFx) {
+        st.setScale(0.01);
+        this.scene.tweens.add({ targets: st, scale: PD.TEX_SCALE * 1.1, duration: 260, delay: 250 + i * 220, ease: 'Back.easeOut' });
+      }
+    });
+    this.starNote.setText((opts && opts.note) || '').setVisible(starCount > 0);
     // 四顆按鈕排成兩列兩行（暫停畫面），其他情況排一列
     const twoRows = buttons.length > 3;
     const perRow = twoRows ? 2 : buttons.length;
     const startX = this.cx - (perRow * 300 + (perRow - 1) * 30) / 2 + 150;
-    this.title.setY(twoRows ? 262 : 280);
-    this.msg.setY(twoRows ? 336 : 368);
+    this.title.setY(twoRows ? 262 : starCount ? 256 : 280);
+    this.msg.setY(twoRows ? 336 : starCount ? 398 : 368);
     this.btns.forEach((b, i) => {
       const def = buttons[i];
       b.on = !!def;

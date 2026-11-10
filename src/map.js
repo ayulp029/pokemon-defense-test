@@ -83,8 +83,18 @@ PD.MapScene = class MapScene extends Phaser.Scene {
       g.lineTo(at.x - 8, at.y + 36);
       g.lineTo(at.x + 36, at.y - 10);
       g.strokePath();
-      PD.txt(this, at.x, at.y + R + 24, PD.text.levelCleared, 26, '#c9f5d0');
-      return { level, rect, open };
+      // 過關的星星（重玩只留最好的一次）；舊存檔沒有星星紀錄時照舊寫「過關了」
+      const stars = PD.Progress.stars(this.modeId, level.number);
+      if (stars) {
+        const sy = at.y + R + 22;
+        g.fillStyle(0x1f2a38, 0.75).fillRoundedRect(at.x - 76, sy - 26, 152, 52, 26);
+        for (let i = 0; i < 3; i++) {
+          PD.img(this, at.x + (i - 1) * 46, sy, i < stars ? 'rankStar' : 'rankStarEmpty').setScale(PD.TEX_SCALE * 0.66);
+        }
+      } else {
+        PD.txt(this, at.x, at.y + R + 24, PD.text.levelCleared, 26, '#c9f5d0');
+      }
+      return { level, rect, open, stars };
     }
     // 這一關第一次出現的朋友，用現有的卡片圖
     const fresh = PD.config.cardOrder.filter((k) => PD.config.units[k].unlock === level.number);

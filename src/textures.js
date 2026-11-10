@@ -541,6 +541,19 @@ PD.TEX_SCALE = 1 / PD.RES;
     add('glow', 96, 96, (c) => softDot(c, 96, 0.35));
     add('spark', 24, 24, (c) => softDot(c, 24, 0.6));
     add('star', 40, 40, (c) => { star(c, 20, 20, 19, 8); c.fillStyle = '#fff'; c.fill(); });
+    // 關卡星星（勝利畫面與大地圖）：拿到的是金色有高光，沒拿到的是深色空心，形狀一樣、靠顏色和亮度分辨
+    add('rankStar', 64, 64, (c) => {
+      star(c, 32, 34, 29, 13); c.fillStyle = '#ffd23f'; c.fill();
+      c.lineJoin = 'round'; c.lineWidth = 4; c.strokeStyle = OUTLINE; c.stroke();
+      star(c, 32, 34, 29, 13); c.save(); c.clip();
+      c.fillStyle = '#ffb21f'; c.fillRect(32, 0, 40, 64);
+      c.fillStyle = 'rgba(255,255,255,0.7)'; c.beginPath(); c.ellipse(24, 24, 7, 4, -0.6, 0, 7); c.fill();
+      c.restore();
+    });
+    add('rankStarEmpty', 64, 64, (c) => {
+      star(c, 32, 34, 29, 13); c.fillStyle = 'rgba(31,42,56,0.55)'; c.fill();
+      c.lineJoin = 'round'; c.lineWidth = 4; c.strokeStyle = 'rgba(240,244,248,0.75)'; c.stroke();
+    });
     add('ring', 96, 96, (c) => {
       c.strokeStyle = '#fff'; c.lineWidth = 5; c.beginPath(); c.arc(48, 48, 44, 0, 7); c.stroke();
     });

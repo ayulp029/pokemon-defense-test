@@ -88,6 +88,7 @@ window.PD = window.PD || {};
     levelLabel: (n) => `第 ${n} 關`,
     levelLocked: '先過前一關才能去',
     levelCleared: '過關了',
+    starsBetter: '星星變多了！',
     newFriend: '新朋友',
     newFriendTitle: (name) => `新朋友：${name}！`,
     friendDesc: {
@@ -517,6 +518,15 @@ window.PD = window.PD || {};
     // skillCdMul：5 歲模式技能冷卻短 20%（active-skills-v1）；「5 歲模式」對應「一起守護」
     together: { speedMul: 0.75, rescues: 3, autoWaveHint: true, skillCdMul: 0.8, showSkillSeconds: false },
     solo: { speedMul: 1, rescues: 3, autoWaveHint: false, skillCdMul: 1, showSkillSeconds: true },
+  };
+
+  // 關卡星星（擁有者 2026-11-10 要求）：看過關時還剩幾次救援（畫面上的盾牌）。
+  // 滿的 3 次都在＝3 星、剩 2 次＝2 星、剩 1 次或 0 次＝1 星；過關至少 1 星。
+  // 兩種模式目前都是 3 次；若以後某模式次數不同，就照比例換算（剩下的比例 × 3，無條件進位）。
+  PD.levelStars = function (left, max) {
+    if (!(max > 0)) return 3;
+    const n = Math.ceil((3 * Math.max(0, Math.min(left, max))) / max - 1e-9);
+    return Math.max(1, Math.min(3, n));
   };
 
   PD.names = names;

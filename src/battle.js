@@ -805,12 +805,16 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     this.fx.confetti(this.L.width);
     PD.Sound.stopMusic();
     PD.Sound.play('win');
-    PD.Progress.markCleared(this.modeId, this.sim.level.number);
+    const mode = this.sim.mode;
+    const stars = PD.levelStars(mode.rescues - this.sim.state.rescues, mode.rescues);
+    const hadStars = PD.Progress.stars(this.modeId, this.sim.level.number);
+    const better = PD.Progress.markCleared(this.modeId, this.sim.level.number, stars);
+    this.lastStars = stars;
     const buttons = [];
     if (this.cfg.levels[this.levelIndex + 1]) buttons.push({ label: PD.text.nextLevel, fn: () => this.goLevel(this.levelIndex + 1) });
     buttons.push({ label: PD.text.backToMap, fn: () => this.goMap() });
     buttons.push({ label: PD.text.playAgain, fn: () => this.sim.restart() });
-    this.overlay.show(PD.text.winTitle, PD.text.winMsg, buttons);
+    this.overlay.show(PD.text.winTitle, PD.text.winMsg, buttons, { stars, note: better && hadStars ? PD.text.starsBetter : '' });
   }
 
   onFailed() {
