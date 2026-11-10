@@ -636,9 +636,14 @@ window.PD = window.PD || {};
     scene.textures.addCanvas('mapBg', canvas);
   };
 
-  // 暫停、勝利、失敗共用的大面板；太大放不進合併大圖，自己一張
+  // 暫停、勝利、失敗共用的大面板；太大放不進合併大圖，自己一張。
+  // 另做一張窄的 panelNarrow（新招式提示用：面板往右讓出左邊技能欄旁的空位給箭頭與「點這裡放招！」）
   PD.buildPanel = function (scene) {
-    const w = 1040;
+    drawPanel(scene, 'panel', 1040);
+    drawPanel(scene, 'panelNarrow', PD.config.layout.panelNarrow.w);
+  };
+
+  function drawPanel(scene, key, w) {
     const h = 380;
     const { canvas, c } = newCanvas(w, h);
     rr(c, 4, 4, w - 8, h - 8, 34);
@@ -653,6 +658,6 @@ window.PD = window.PD || {};
     c.lineWidth = 2; c.strokeStyle = 'rgba(255,233,168,0.5)'; c.stroke();
     rr(c, 4, 4, w - 8, h - 8, 34);
     c.lineWidth = 5; c.strokeStyle = OUTLINE; c.stroke();
-    scene.textures.addCanvas('panel', canvas);
-  };
+    scene.textures.addCanvas(key, canvas);
+  }
 })();

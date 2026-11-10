@@ -129,7 +129,9 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     this.hintText = PD.txt(this, L.hint.x, L.hint.y, '', 30, '#ffffff', 5).setDepth(400);
     // 勝利／失敗／暫停／介紹等覆蓋畫面開著時，上排提示句先藏起來（例如勝利時不再寫「球會自己收好。」），
     // 關掉後原本的提示照舊顯示、照舊計時清掉
-    this.overlay.onToggle = (shown) => this.hintText.setVisible(!shown);
+    // 任何覆蓋畫面打開或關掉時，都先收起招式／新卡片的箭頭，不讓箭頭留在別張提示上；
+    // 要指東西的提示（新朋友、新招式）會在 overlay.show 之後、關掉後的短箭頭會在 overlay.hide 之後才 showSpot
+    this.overlay.onToggle = (shown) => { this.hintText.setVisible(!shown); this.hideSpot(); };
     this.hintText.setVisible(!this.overlay.visible);
 
     // 按鈕底圖與上面的圖示／字：按下時一起往下（PD.press）
@@ -288,8 +290,13 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
         g.arc(s.x, s.y, (R - 4) * scale, -Math.PI / 2, end, false);
         g.strokePath();
         if (this.sim.mode.showSkillSeconds) {
-          const n = Math.ceil((this.sim.skillReadyAt(s.kind) - this.sim.state.tick) / this.sim.tps);
-          if (n !== s.shown) { s.shown = n; s.secs.setText(String(n)); } // 只有數字變了才重畫文字
+          // 夾在 0 以上：開戰前／過關後冷卻停住時，tick 可能已超過 readyAt，不可顯示負數（例如「-12」）
+          const n = Math.max(0, Math.ceil((this.sim.skillReadyAt(s.kind) - this.sim.state.tick) / this.sim.tps));
+          if (n !== s.shown) { // 只有數字變了才重畫文字；倒數到 0 就不再顯示秒數牌子
+            s.shown = n;
+            s.secs.setText(String(n)).setVisible(n > 0);
+            s.secsBg.setVisible(n > 0);
+          }
         }
       }
     }
@@ -394,6 +401,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
   showSkillTip(kind) {
     this.skillTipKind = kind;
     this.introKind = 'skill-' + kind; // 自動試玩靠 introKind 知道畫面在等人按鈕
+    // 用窄面板：左邊技能欄旁讓出空位，箭頭與「點這裡放招！」不論是第幾個技能槽都不壓到面板
     this.overlay.show(PD.text.newSkillTitle(PD.names['skill_' + kind]), PD.text.skillDesc[kind], [{ label: PD.text.gotIt, fn: () => {
       PD.friendTipSeen.add(this.modeId + ':skill:' + kind);
       this.skillTipKind = '';
@@ -403,10 +411,11 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
       this.overlay.hide();
       const slot = this.skillSlots.find((s) => s.kind === kind);
       if (slot) this.showSpot('nudge-' + kind, slot.rect, 'left', PD.text.spotSkill, [], 6); // 關掉後再指 6 秒
-    } }]);
+    } }], { narrow: true });
     PD.Sound.play('tip');
-    // 右邊放一顆大大的招式圖示（左邊留給指向真正圖示的箭頭）
-    const px = this.L.width / 2 + 290;
+    // 窄面板右邊放一顆大大的招式圖示（在「好耶」鈕右邊；左邊留給指向真正圖示的箭頭）
+    const N = this.L.panelNarrow;
+    const px = N.x + N.w - 90;
     if (!this.introPic) this.introPic = PD.img(this, 0, 0, 'skillBase_' + kind).setDepth(501);
     this.introPic.setFrame('skillBase_' + kind).setVisible(true).setPosition(px, 500).setScale(PD.TEX_SCALE * 1.5);
     const slot = this.skillSlots.find((s) => s.kind === kind);
@@ -709,7 +718,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
         this.hintSwapAt = this.clock + 4;
         break;
       case 'wave':
-        if (this.sim.mode.autoWaveHint) this.showWaveHint(ev);
+        if (ev.hint) this.showWaveHint(ev); // 規則只在每條路第一次出波時停下來（一起守護）
         break;
       case 'shot': this.onShot(ev); break;
       case 'burn': {
@@ -815,7 +824,8 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
   showWaveHint(ev) {
     const y = this.laneY(ev.lane);
     this.foot.setPosition(this.ruleToX(10), y).setVisible(true);
-    this.overlay.show(PD.text.waveHintTitle(ev.lane), '', [
+    this.hideSpot(); // 不留下上一招的「點這裡放招！」箭頭（overlay.show 也會收，這裡再保險一次）
+    this.overlay.show(PD.text.waveHintTitle(ev.lane), PD.text.waveHintMsg, [
       { label: PD.text.resume, fn: () => { this.overlay.hide(); this.foot.setVisible(false); this.sim.command({ type: 'continue' }); } },
     ]);
   }
@@ -1138,12 +1148,9 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     if (v.hover) offY -= v.hover + Math.sin(this.worldClock * 3 + v.seed) * 4; // 飛在空中，影子留在地上
     if (v.flash > 0) {
       v.flash -= dt;
-      // 隊長／大王很大又一直被打：整隻變白剪影太刺眼，改成淡淡的粉紅色調；
-      // 沒有貼圖的色塊敵人（缺圖退回時）閃白會變成一整塊白方塊，也用粉紅色調；其他敵人照舊閃白
-      const ed = v.isEnemy && this.cfg.enemies[v.kind];
-      if (ed && (ed.boss || ed.plain)) v.body.setTint(0xffc4cc);
-      else v.body.setTintFill(0xffffff);
-      v.tintNow = -1; // 閃白結束後重新套色
+      // 被打時一律用淡淡的粉紅色調（不再整隻變成白剪影，太刺眼）
+      v.body.setTint(0xffc4cc);
+      v.tintNow = -1; // 受擊結束後重新套色
       offX += Math.sin(v.flash * 90) * 2;
     } else {
       const tint = v.slowed ? SLOW_TINT : 0;
@@ -1294,7 +1301,9 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     if (this.selected) {
       this.showHint(PD.text.tapGlowCell);
     } else if (k) {
-      this.showHint(k === 'trainer' ? PD.text.pickTrainer : PD.text.pickShooter);
+      // 第 1 關一步一步教；第 2 關起直接說「每一關都先放這兩位」（一起守護重看也一樣）
+      if (this.sim.level.number > 1) this.showHint(PD.text.startersEveryLevel);
+      else this.showHint(k === 'trainer' ? PD.text.pickTrainer : PD.text.pickShooter);
       this.foot.setVisible(false);
     }
   }
@@ -1462,10 +1471,10 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     return true;
   }
 
-  // 這張卡現在點下去能不能選（不看球數）：開戰前只能選開戰需要的角色、小勇有人數上限
+  // 這張卡看起來能不能選（不看球數）：只看小勇的人數上限。
+  // 開戰前只能放小勇和電電鼠（規則照舊），但其他已解鎖的卡不再變灰（以前看起來像壞掉或鎖住）；
+  // 點下去由 tapCard 友善提示「要先把小勇和電電鼠放出來喔」
   cardUsable(card) {
-    const s = this.sim.state;
-    if (s.phase === 'prep' && this.sim.level.requiredToStart.indexOf(card.kind) === -1) return false;
     const max = card.def.maxCount;
     return !(max && this.sim.countUnits(card.kind) >= max);
   }

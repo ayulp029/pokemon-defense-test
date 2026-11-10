@@ -39,7 +39,7 @@ PD.BootScene = class BootScene extends Phaser.Scene {
 
   create() {
     // 有專屬貼圖的敵人：畫面大小換成貼圖的比例（只影響外觀，規則不看大小）
-    // plain＝完全沒有貼圖、只能畫色塊（閃白會變一整塊白方塊，改用粉紅色調；身上要蓋名字）
+    // plain＝完全沒有貼圖、只能畫色塊（身上要蓋名字）
     Object.entries(PD.config.enemies).forEach(([k, d]) => {
       d.ownArt = !!(d.art && this.textures.exists('art_' + d.art.file));
       if (d.ownArt) d.size = d.art.size;
@@ -66,7 +66,6 @@ PD.StartScene = class StartScene extends Phaser.Scene {
       .setBlendMode(Phaser.BlendModes.ADD).setTint(0xffd84a).setScale(14 * PD.TEX_SCALE, 4.8 * PD.TEX_SCALE).setAlpha(0.35);
     PD.txt(this, L.width / 2, 230, PD.names.game, 76, '#ffe9a8', 9);
     PD.txt(this, L.width / 2, 340, PD.text.teamComing, 32);
-    PD.txt(this, L.width / 2, 420, PD.text.tapToStart, 30, '#ffffff');
 
     const button = (r, label) => {
       const bg = PD.img(this, r.x + r.w / 2, r.y + r.h / 2, 'btnBig');

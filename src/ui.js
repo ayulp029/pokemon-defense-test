@@ -44,6 +44,9 @@ PD.Overlay = class Overlay {
     this.dim = scene.add.image(this.cx, L.height / 2, 'atlas', 'white')
       .setDisplaySize(L.width + 40, L.height + 40).setTint(0x101a24).setAlpha(0.55);
     this.panel = scene.add.image(this.cx, 400, 'panel').setScale(PD.TEX_SCALE);
+    // opts.narrow：改用窄面板（新招式提示，左邊讓給指向技能鈕的箭頭），標題、說明與按鈕跟著面板置中
+    const N = L.panelNarrow;
+    this.narrowCx = N.x + N.w / 2;
     this.title = PD.txt(scene, this.cx, 280, '', 60, '#ffe9a8', 7);
     this.msg = PD.txt(scene, this.cx, 368, '', 32);
     this.c.add([this.dim, this.panel, this.title, this.msg]);
@@ -68,8 +71,10 @@ PD.Overlay = class Overlay {
 
   // opts.stars：1～3 顯示星星列（勝利畫面）；opts.note：星星旁的小字
   show(title, msg, buttons, opts) {
-    this.title.setText(title);
-    this.msg.setText(msg || '');
+    const cx = opts && opts.narrow ? this.narrowCx : this.cx;
+    this.panel.setTexture(opts && opts.narrow ? 'panelNarrow' : 'panel').setX(cx);
+    this.title.setText(title).setX(cx);
+    this.msg.setText(msg || '').setX(cx);
     const starCount = (opts && opts.stars) || 0;
     this.starCount = starCount;
     this.stars.forEach((st, i) => {
@@ -96,7 +101,7 @@ PD.Overlay = class Overlay {
     // 四顆按鈕排成兩列兩行（暫停畫面），其他情況排一列
     const twoRows = buttons.length > 3;
     const perRow = twoRows ? 2 : buttons.length;
-    const startX = this.cx - (perRow * 300 + (perRow - 1) * 30) / 2 + 150;
+    const startX = cx - (perRow * 300 + (perRow - 1) * 30) / 2 + 150;
     this.title.setY(twoRows ? 262 : starCount ? 254 : 280);
     this.msg.setY(twoRows ? 336 : starCount ? (note ? 416 : 398) : 368);
     this.btns.forEach((b, i) => {

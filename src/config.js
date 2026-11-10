@@ -47,7 +47,6 @@ window.PD = window.PD || {};
   const text = {
     modeTogether: '一起守護',
     modeSolo: '自己挑戰',
-    tapToStart: '點一下開始',
     teamComing: `${names.enemyTeam}要來了，一起守護村莊！`,
     pickTrainer: `先點「${names.trainer}」卡片`,
     pickShooter: `再點「${names.basicShooter}」卡片`,
@@ -61,7 +60,8 @@ window.PD = window.PD || {};
     trainerLimit: `${names.trainer}最多 2 位`,
     occupied: '這裡已經有朋友了',
     rescued: '送回去了，村莊沒事！',
-    waveHintTitle: (lane) => `第 ${lane} 路有朋友要來了`,
+    waveHintTitle: (lane) => `第 ${lane} 路有${names.enemyTeam}要來了`,
+    waveHintMsg: '從右邊來了，看那一條路！',
     rest: '休息',
     pauseTitle: '暫停一下',
     resume: '繼續',
@@ -83,7 +83,8 @@ window.PD = window.PD || {};
     recallNone: '場上還沒有朋友',
     turnDevice: '請把 iPad 轉成橫向',
     speedLabel: (n) => `${n}×`,
-    startersFirst: `先放${names.trainer}和${names.basicShooter}`,
+    startersFirst: `要先把${names.trainer}和${names.basicShooter}放出來喔`,
+    startersEveryLevel: `每一關都先放「${names.trainer}」和「${names.basicShooter}」`,
     mapTitle: '選一關出發',
     levelLabel: (n) => `第 ${n} 關`,
     levelLocked: '先過前一關才能去',
@@ -197,6 +198,9 @@ window.PD = window.PD || {};
     orbHitSize: 64,
     // 常駐技能圖示：放在村莊那一欄（x 0～120，不佔草地）。畫面直徑 72；點擊範圍 78，1024×768 下約 67.7 點
     skillBar: { x: 60, firstY: 130, gap: 82, size: 72, hit: 78 },
+    // 新招式提示用的窄面板（x 350～1110，右緣和大面板一樣）：左邊讓出空位，
+    // 指向技能鈕的箭頭與「點這裡放招！」（約 x 105～335）不壓到面板。大面板是 x 70～1110
+    panelNarrow: { x: 350, w: 760 },
     // 大地圖選關：每一關的圓鈕中心，點擊範圍是圓鈕外的正方形（200×200）
     map: {
       // 蛇行兩排：上排第 1～3 關往右，下排第 4～6 關往左；上下排相距 280，點擊範圍不重疊

@@ -41,7 +41,7 @@ PD.BattleSim = class BattleSim {
     return {
       phase: 'prep', tick: 0, balls: this.tune.startBalls || this.rules.startBalls, nextId: 1,
       nextSpawn: 0, lastSnapWave: 0, rescues: 0, placeCd: 0, kills: 0, skillAt: {},
-      waitingHint: false, skySeq: 0, units: [], enemies: [], orbs: [], zones: [], introduced: [], rallyEnd: 0, rallyFactor: 1,
+      waitingHint: false, hintLanes: [], skySeq: 0, units: [], enemies: [], orbs: [], zones: [], introduced: [], rallyEnd: 0, rallyFactor: 1,
     };
   }
 
@@ -121,11 +121,14 @@ PD.BattleSim = class BattleSim {
     const now = s.tick + 1;
     const next = this.level.script[s.nextSpawn];
     if (next && this.ticks(next.t) === now && next.wave > s.lastSnapWave) {
+      // 一起守護：同一關每條路只在第一次出波時暫停提示一次（之後同一條路不再停）
+      const hint = !!this.mode.autoWaveHint && s.hintLanes.indexOf(next.lane) === -1;
+      if (hint) s.hintLanes.push(next.lane); // 先記再存檔：重試這一段時不會再停一次
       // 波次第一隻出現「之前」存下完整狀態
       this.snapshot = JSON.stringify(s);
       s.lastSnapWave = next.wave;
-      this.events.push({ type: 'wave', wave: next.wave, lane: next.lane });
-      if (this.mode.autoWaveHint) { s.waitingHint = true; return true; }
+      this.events.push({ type: 'wave', wave: next.wave, lane: next.lane, hint });
+      if (hint) { s.waitingHint = true; return true; }
     }
     s.tick = now;
     if (this.bossWarnAt[now]) this.events.push({ type: 'bossWarn', lane: this.bossWarnAt[now] });
