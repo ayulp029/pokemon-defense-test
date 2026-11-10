@@ -157,6 +157,6 @@ PD.probeIdleSheets().then(function () {
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
     audio: { noAudio: true },
     banner: false,
-    scene: [PD.BootScene, PD.StartScene, PD.MapScene, PD.BattleScene],
+    scene: [PD.BootScene, PD.StartScene, PD.MapScene, PD.BestiaryScene, PD.BattleScene],
   });
 });

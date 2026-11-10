@@ -24,6 +24,10 @@ PD.MapScene = class MapScene extends Phaser.Scene {
     const B = M.backBtn;
     this.backBg = PD.img(this, B.x + B.w / 2, B.y + B.h / 2, 'btnWide').setDisplaySize(B.w, B.h);
     this.backText = PD.txt(this, B.x + B.w / 2, B.y + B.h / 2, PD.text.changeMode, 30, '#3a2a10', 0);
+    // 圖鑑鈕：右上角，和「換模式」同一套按鈕圖
+    const D = M.bestiaryBtn;
+    this.bookBg = PD.img(this, D.x + D.w / 2, D.y + D.h / 2, 'btnWide').setDisplaySize(D.w, D.h);
+    this.bookText = PD.txt(this, D.x + D.w / 2, D.y + D.h / 2, PD.text.bestiary, 30, '#3a2a10', 0);
 
     this.hint = PD.txt(this, L.width / 2, 760, '', 32);
     // 用 pointerdown：從戰鬥畫面按「回地圖」時手指還沒放開，不會誤觸地圖上的關卡
@@ -146,6 +150,12 @@ PD.MapScene = class MapScene extends Phaser.Scene {
       PD.Sound.play('tap');
       PD.press(this, this.backBg, [this.backText]);
       this.time.delayedCall(90, () => this.scene.start('Start'));
+      return;
+    }
+    if (PD.hitRect(M.bestiaryBtn, x, y)) {
+      PD.Sound.play('tap');
+      PD.press(this, this.bookBg, [this.bookText]);
+      this.time.delayedCall(90, () => this.scene.start('Bestiary', { mode: this.modeId }));
       return;
     }
     const node = this.nodes.find((n) => PD.hitRect(n.rect, x, y));

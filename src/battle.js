@@ -20,6 +20,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     this.cfg = cfg;
     this.L = cfg.layout;
     this.sim = new PD.BattleSim(cfg, this.levelIndex, this.modeId);
+    PD.Bestiary.enterLevel(this.sim.level.number); // 圖鑑：這一關已解鎖的好朋友算遇到
     this.fx = new PD.Fx(this, cfg);
     this.skillFx = new PD.SkillFx(this, cfg);
     this.overlay = new PD.Overlay(this, cfg);
@@ -973,6 +974,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     if (!v) {
       v = this.acquireActor(e.id, 'enemy_' + e.kind, PD.names[e.kind], def.size, this.footY(e.lane), true);
       v.kind = e.kind;
+      PD.Bestiary.seeEnemy(e.kind); // 圖鑑：真的出現在場上才算遇到
       if (this.textures.exists('art_' + (def.artFrom || e.kind))) v.label.setText(''); // 有貼圖就不在身上蓋字
       v.c.setDepth(25 + e.lane * 10 + (def.flying ? 5 : 0)); // 飛的畫在同路其他敵人上面
       v.hover = def.hover || 0;

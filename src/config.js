@@ -139,6 +139,36 @@ window.PD = window.PD || {};
     skillWait: '還要等一下才能再用',
     skillReady: '可以放招了！點左邊的圖示',
     skillNoUnit: (name) => `場上還沒有${name}`,
+    // 圖鑑（大地圖右上的按鈕）：句子給 5 歲孩子聽得懂；搗蛋團是調皮，不是壞
+    bestiary: '圖鑑',
+    bestiaryTitle: '圖鑑',
+    bestiaryFriends: '好朋友',
+    bestiaryEnemies: names.enemyTeam,
+    bestiaryUnknownName: '？？？',
+    bestiaryUnknown: '還沒遇到，繼續冒險就會遇到喔！',
+    bestiaryTapHint: '點一格可以放大看',
+    bestiaryDesc: {
+      trainer: `會收集${names.orb}，請好朋友們出來幫忙。`,
+      basicShooter: `會射小閃電，幫忙擋住${names.enemyTeam}。`,
+      doubleStriker: '用藤鞭啪啪打兩下，站在前面好勇敢。',
+      tank: `睡得飽飽又很耐打，幫大家擋住${names.enemyTeam}。`,
+      slowShooter: `噴水水，讓${names.enemyTeam}走得慢吞吞。`,
+      burnShooter: '尾巴有小火苗，打中會熱熱的。',
+      pierceShooter: '亮晶晶的波紋，一次打到整條路。',
+      scout: `${names.enemyTeam}的小跟班，最喜歡惡作劇。`,
+      tough: '身上有紫色花紋，比較耐打。',
+      runner: '跑得好快，急著去跑腿。',
+      bruiser: '穿著鐵甲，走得慢慢的，很耐打。',
+      healer: '會幫同伴貼貼補血。',
+      jumper: '腳上有彈簧，會跳過第一個朋友。',
+      splitter: `被打倒會變成兩隻${names.splitling}。`,
+      flyer: '會在天上飛，要請射遠的朋友幫忙。',
+      lobber: '愛丟球玩，會丟向後面的朋友。',
+      phantom: '喜歡玩躲貓貓，一下不見、一下出現。',
+      armored: '殼硬硬的，走路很慢很慢。',
+      boss: `${names.enemyTeam}的隊長，會叫小兵一起來玩。`,
+      finalBoss: `${names.enemyTeam}的大隊長，敲鼓咚咚咚！`,
+    },
   };
 
   // ===== 版面（基準畫面 1180×820）=====
@@ -173,6 +203,18 @@ window.PD = window.PD || {};
       nodes: [{ x: 210, y: 290 }, { x: 590, y: 290 }, { x: 970, y: 290 }, { x: 970, y: 570 }, { x: 590, y: 570 }, { x: 210, y: 570 }],
       nodeHit: 200,
       backBtn: { x: 20, y: 16, w: 170, h: 84 },
+      // 圖鑑鈕：右上角，和「換模式」同大小（1024×768 下約 148×73 點），不壓到圓鈕、木牌、小路與旗子
+      bestiaryBtn: { x: 990, y: 16, w: 170, h: 84 },
+    },
+    // 圖鑑頁：上方兩個分頁鈕與「回地圖」鈕（都 ≥ 84 高，1024×768 下約 73 點）；下面是格子（點擊範圍＝整格）
+    bestiary: {
+      tabs: [{ x: 20, y: 16, w: 220, h: 84 }, { x: 256, y: 16, w: 220, h: 84 }],
+      closeBtn: { x: 990, y: 16, w: 170, h: 84 },
+      // 好朋友 7 格：4 欄 2 列，每格 260×318；搗蛋團 13 格：5 欄 3 列，每格 208×212（1024×768 下約 180×184 點）
+      grids: [
+        { x: 40, y: 124, cols: 4, w: 260, h: 318, gap: 20 },
+        { x: 42, y: 124, cols: 5, w: 208, h: 212, gap: 14 },
+      ],
     },
     start: {
       together: { x: 300, y: 470, w: 260, h: 130 },
