@@ -178,7 +178,10 @@ PD.BestiaryScene = class BestiaryScene extends Phaser.Scene {
   }
 
   showDetail(e) {
-    this.dPic.setFrame(e.frame).clearTint().setAlpha(1);
+    // 放大圖用高解析來源（卡片 512／敵人原圖，見 textures.js 的 PD.bestiaryPic），不放大場上小圖；沒遇到的也用同一張做剪影
+    const pic = PD.bestiaryPic(this, e.field, e.kind, 270, 390);
+    this.dPic.setTexture(pic.key, pic.frame).clearTint().setAlpha(1);
+    this.detailTex = pic.key;
     this.fit(this.dPic, 270, 390);
     if (!e.seen) this.dPic.setTintFill(0x141c26);
     this.dQ.setVisible(!e.seen);

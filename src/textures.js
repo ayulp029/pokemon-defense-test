@@ -33,14 +33,15 @@ PD.TEX_SCALE = 1 / PD.RES;
 
   // 本機貼圖：等比縮進角色大小，腳底對齊下緣、左右置中。
   // 縮超過一半時先分次對半縮，細線才不會出現鋸齒。
-  function drawArt(ctx, w, h, img) {
+  // dens＝這張圖最後的像素密度（場上大圖是 PD.RES；圖鑑放大圖用更高的密度）
+  function drawArt(ctx, w, h, img, dens = DENSITY) {
     const s = Math.min(w / img.width, h / img.height);
     const dw = img.width * s;
     const dh = img.height * s;
     let src = img;
     let sw = img.width;
     let sh = img.height;
-    while (sw > dw * DENSITY * 2 && sh > dh * DENSITY * 2) {
+    while (sw > dw * dens * 2 && sh > dh * dens * 2) {
       const half = document.createElement('canvas');
       half.width = Math.ceil(sw / 2);
       half.height = Math.ceil(sh / 2);
@@ -69,17 +70,17 @@ PD.TEX_SCALE = 1 / PD.RES;
 
   // 用已公開的貼圖做出新敵人：整張換色、加上一圈描邊、左右翻轉成面朝左（keepFacing＝原圖已面朝左，不翻）。
   // 全程用瀏覽器合成模式（iPad Safari 不支援 canvas 的 filter），不產生圖檔。
-  function drawRecolored(ctx, w, h, art, def, keepFacing) {
+  function drawRecolored(ctx, w, h, art, def, keepFacing, dens = DENSITY) {
     const make = () => {
       const cv = document.createElement('canvas');
-      cv.width = Math.ceil(w * DENSITY);
-      cv.height = Math.ceil(h * DENSITY);
+      cv.width = Math.ceil(w * dens);
+      cv.height = Math.ceil(h * dens);
       const c = cv.getContext('2d');
-      c.scale(DENSITY, DENSITY);
+      c.scale(dens, dens);
       return { cv, c };
     };
     const M = 3; // 留給描邊的邊距
-    const paint = (c) => { c.save(); c.translate(M, M); drawArt(c, w - M * 2, h - M * 2, art); c.restore(); };
+    const paint = (c) => { c.save(); c.translate(M, M); drawArt(c, w - M * 2, h - M * 2, art, dens); c.restore(); };
     const body = make();
     paint(body.c);
     body.c.globalCompositeOperation = 'color';
@@ -758,33 +759,77 @@ PD.TEX_SCALE = 1 / PD.RES;
       }
     });
     Object.keys(cfg.enemies).forEach((k) => {
-      const d = cfg.enemies[k];
-      // 頭目的專屬貼圖：整隻取進來（box 已含整隻），腳底對齊下緣；圖上已有帽子、斗篷和鼓，不再加程式配件
-      if (d.ownArt) {
-        const own = cropArt(scene.textures.get('art_' + d.art.file).getSourceImage(), d.art.box);
-        add('enemy_' + k, d.size.w, d.size.h, (c) => {
-          if (d.art.recolor) drawRecolored(c, d.size.w, d.size.h, own, d.art, true);
-          else drawArt(c, d.size.w, d.size.h, own);
-        });
-        return;
-      }
-      const key = 'art_' + (d.artFrom || k);
-      const art = scene.textures.exists(key) ? scene.textures.get(key).getSourceImage() : null;
-      add('enemy_' + k, d.size.w, d.size.h, (c) => {
-        const acc = accessories[d.accessory];
-        const box = d.bodyBox || { x: 0, y: 0, w: d.size.w, h: d.size.h };
-        if (acc && acc.back) acc.back(c, d.size.w, d.size.h);
-        c.save();
-        c.translate(box.x, box.y);
-        if (!art) drawEnemy(c, box.w, box.h, d);
-        else if (d.artFrom) drawRecolored(c, box.w, box.h, art, d);
-        else drawArt(c, box.w, box.h, art);
-        c.restore();
-        if (acc && acc.front) acc.front(c, d.size.w, d.size.h);
-      });
+      const p = enemyPainter(scene, cfg.enemies[k], k);
+      add('enemy_' + k, p.w, p.h, (c) => p.draw(c, DENSITY));
     });
     return list;
   }
+
+  // 一隻敵人的畫法（場上大圖與圖鑑放大圖共用）：w×h 是邏輯大小，draw(c, dens) 在邏輯座標裡畫，dens＝最後的像素密度。
+  // src＝原圖每一邏輯單位有幾個像素（沒有原圖時是 0）；direct＝原圖本身就等於這張圖（不用重畫，圖鑑可直接拿原圖）
+  function enemyPainter(scene, d, k) {
+    const w = d.size.w;
+    const h = d.size.h;
+    const ratio = (img, bw, bh) => Math.max(img.width / bw, img.height / bh);
+    // 頭目等專屬貼圖：整隻取進來（box 已含整隻），腳底對齊下緣；圖上已有帽子、斗篷和鼓，不再加程式配件
+    if (d.ownArt) {
+      const own = cropArt(scene.textures.get('art_' + d.art.file).getSourceImage(), d.art.box);
+      return {
+        w, h, src: ratio(own, w - (d.art.recolor ? 6 : 0), h - (d.art.recolor ? 6 : 0)), direct: d.art.recolor ? null : own,
+        draw: (c, dens) => (d.art.recolor ? drawRecolored(c, w, h, own, d.art, true, dens) : drawArt(c, w, h, own, dens)),
+      };
+    }
+    const key = 'art_' + (d.artFrom || k);
+    const art = scene.textures.exists(key) ? scene.textures.get(key).getSourceImage() : null;
+    const acc = accessories[d.accessory];
+    const box = d.bodyBox || { x: 0, y: 0, w, h };
+    return {
+      w, h,
+      src: art ? ratio(art, box.w - (d.artFrom ? 6 : 0), box.h - (d.artFrom ? 6 : 0)) : 0,
+      direct: art && !d.artFrom && !acc && !d.bodyBox ? art : null,
+      draw: (c, dens) => {
+        if (acc && acc.back) acc.back(c, w, h);
+        c.save();
+        c.translate(box.x, box.y);
+        if (!art) drawEnemy(c, box.w, box.h, d);
+        else if (d.artFrom) drawRecolored(c, box.w, box.h, art, d, false, dens);
+        else drawArt(c, box.w, box.h, art, dens);
+        c.restore();
+        if (acc && acc.front) acc.front(c, w, h);
+      },
+    };
+  }
+
+  // 圖鑑放大圖用的高解析圖（不放進場上大圖，第一次打開時才做，之後重複使用）。回傳 { key, frame }。
+  //   好朋友：完整的 512×512 卡片圖 card-<代號>.png；缺檔才退回場上小圖。
+  //   搗蛋團：原圖就等於場上那張（小兵、紫紋蛇、跑腿貓、鼓鼓隊長）時直接用原圖（有 box 的取同一塊）；
+  //   要重新上色或加配件的（鐵鎚隊長、借圖上色的、厚殼機器人色塊）用場上同一套畫法，
+  //   以「原圖完整像素」與「填滿放大框 maxW×maxH×PD.RES」兩者較高的密度重畫。
+  PD.bestiaryPic = function (scene, field, kind, maxW = 270, maxH = 390) {
+    const T = scene.textures;
+    const linear = (key) => { T.get(key).setFilter(Phaser.Textures.FilterMode.LINEAR); return { key, frame: undefined }; };
+    if (field === 'friends') {
+      return T.exists('cardArt_' + kind) ? linear('cardArt_' + kind) : { key: 'atlas', frame: 'unit_' + kind };
+    }
+    const key = 'bigPic_' + kind;
+    if (T.exists(key)) return { key, frame: undefined };
+    const d = PD.config.enemies[kind];
+    const p = enemyPainter(scene, d, kind);
+    if (p.direct && p.direct.width) {
+      if (p.direct.tagName === 'CANVAS') T.addCanvas(key, p.direct); else T.addImage(key, p.direct);
+      return linear(key);
+    }
+    const fill = Math.min(maxW / p.w, maxH / p.h) * PD.RES;
+    const S = Math.min(Math.max(p.src, fill), 1600 / Math.max(p.w, p.h));
+    const cv = document.createElement('canvas');
+    cv.width = Math.ceil(p.w * S);
+    cv.height = Math.ceil(p.h * S);
+    const c = cv.getContext('2d');
+    c.scale(S, S);
+    p.draw(c, S);
+    T.addCanvas(key, cv);
+    return linear(key);
+  };
 
   PD.buildAtlas = function (scene, cfg) {
     const canvas = document.createElement('canvas');
