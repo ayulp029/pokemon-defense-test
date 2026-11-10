@@ -604,12 +604,13 @@ window.PD = window.PD || {};
       c.fillStyle = `rgba(255,250,225,${0.25 + rand() * 0.55})`;
       c.beginPath(); c.arc(x, y, 0.7 + rand() * 1.5, 0, 7); c.fill();
     }
-    // 月亮：柔光加一個圓
-    softCircle(c, 1060, 120, 120, '255,240,190', 0.22);
+    // 月亮：柔光加一個圓。放在標題右邊、第 3 關木牌上方的空處（以前在 1060,120，會貼著右上角的圖鑑鈕）
+    const mx = 850, my = 160; // 圖鑑頁的格子從 y 124 開始，月亮整顆藏在格子後面，不從標題下露出一角
+    softCircle(c, mx, my, 120, '255,240,190', 0.22);
     c.fillStyle = '#fff3c4';
-    c.beginPath(); c.arc(1060, 120, 30, 0, 7); c.fill();
+    c.beginPath(); c.arc(mx, my, 30, 0, 7); c.fill();
     c.fillStyle = 'rgba(230,214,160,0.55)';
-    [[1050, 112, 6], [1072, 128, 4], [1056, 134, 3]].forEach((p) => { c.beginPath(); c.arc(p[0], p[1], p[2], 0, 7); c.fill(); });
+    [[mx - 10, my - 8, 6], [mx + 12, my + 8, 4], [mx - 4, my + 14, 3]].forEach((p) => { c.beginPath(); c.arc(p[0], p[1], p[2], 0, 7); c.fill(); });
     // 三層遠山：由遠到近、由暗到亮
     [['#3A5A4A', 0.5, 150, 7], ['#4E6F58', 0.66, 120, 6], ['#6A8B66', 0.82, 96, 5]].forEach(([color, base, amp, n]) => {
       c.fillStyle = color;

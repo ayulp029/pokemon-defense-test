@@ -161,7 +161,7 @@ window.PD = window.PD || {};
       bruiser: '穿著鐵甲，走得慢慢的，很耐打。',
       healer: '會幫同伴貼貼補血。',
       jumper: '腳上有彈簧，會跳過第一個朋友。',
-      splitter: `被打倒會變成兩隻${names.splitling}。`,
+      splitter: `被打倒時，會變成兩隻${names.splitling}。`,
       flyer: '會在天上飛，要請射遠的朋友幫忙。',
       lobber: '愛丟球玩，會丟向後面的朋友。',
       phantom: '喜歡玩躲貓貓，一下不見、一下出現。',

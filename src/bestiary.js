@@ -72,6 +72,19 @@ PD.Bestiary = (function () {
   };
 })();
 
+// 說明句換行：先在「，」「、」後面切成小段，再一段一段排進每行（每行最多 max 個字），
+// 不會把「喜歡」「遇到」這種詞從中間切開；單一小段本身就太長時，才交給文字框照寬度換行
+PD.lineBreak = (s, max) => {
+  const parts = s.match(/[^，、]+[，、]?/g) || [];
+  const lines = [];
+  parts.forEach((p) => {
+    const i = lines.length - 1;
+    if (i >= 0 && lines[i].length + p.length <= max) lines[i] += p;
+    else lines.push(p);
+  });
+  return lines.join('\n');
+};
+
 PD.BestiaryScene = class BestiaryScene extends Phaser.Scene {
   constructor() { super('Bestiary'); }
 
@@ -117,7 +130,7 @@ PD.BestiaryScene = class BestiaryScene extends Phaser.Scene {
   buildPage(list, G) {
     const c = this.add.container(0, 0);
     const big = G.h > 260;
-    const picH = big ? 190 : 116;
+    const picH = big ? 190 : 106; // 小格的圖稍矮，兩行說明才不會超出格子底
     list.forEach((e, i) => {
       const x = G.x + (i % G.cols) * (G.w + G.gap);
       const y = G.y + Math.floor(i / G.cols) * (G.h + G.gap);
@@ -133,13 +146,13 @@ PD.BestiaryScene = class BestiaryScene extends Phaser.Scene {
       const pic = this.fit(this.add.image(x + G.w / 2, y + 12 + picH / 2, 'atlas', e.frame), G.w - 40, picH - 16);
       c.add(pic);
       if (!seen) {
-        pic.setTintFill(0x141c26).setAlpha(0.9); // 同一張圖的深色剪影，不劇透顏色
+        pic.setTintFill(0x141c26); // 同一張圖的深色剪影（不透明，邊緣不透出原色），不劇透顏色
         c.add(PD.txt(this, x + G.w / 2, y + 12 + picH / 2, '？', big ? 76 : 54, '#ffe9a8', 6));
       }
       const nameY = y + 12 + picH + (big ? 30 : 24);
       c.add(PD.txt(this, x + G.w / 2, nameY, seen ? PD.names[e.kind] : PD.text.bestiaryUnknownName, big ? 32 : 26, seen ? '#fff4dc' : '#c3ccd8', 4));
       if (seen) {
-        const desc = PD.txt(this, x + G.w / 2, nameY + (big ? 30 : 22), PD.text.bestiaryDesc[e.kind] || '', big ? 22 : 17, '#fff4dc', 3)
+        const desc = PD.txt(this, x + G.w / 2, nameY + (big ? 30 : 21), PD.lineBreak(PD.text.bestiaryDesc[e.kind] || '', 10), big ? 22 : 17, '#fff4dc', 3)
           .setOrigin(0.5, 0).setAlign('center').setWordWrapWidth(G.w - 24, true);
         c.add(desc);
       }
@@ -167,10 +180,10 @@ PD.BestiaryScene = class BestiaryScene extends Phaser.Scene {
   showDetail(e) {
     this.dPic.setFrame(e.frame).clearTint().setAlpha(1);
     this.fit(this.dPic, 270, 390);
-    if (!e.seen) this.dPic.setTintFill(0x141c26).setAlpha(0.9);
+    if (!e.seen) this.dPic.setTintFill(0x141c26);
     this.dQ.setVisible(!e.seen);
     this.dName.setText(e.seen ? PD.names[e.kind] : PD.text.bestiaryUnknownName);
-    this.dDesc.setText(e.seen ? PD.text.bestiaryDesc[e.kind] || '' : PD.text.bestiaryUnknown);
+    this.dDesc.setText(PD.lineBreak(e.seen ? PD.text.bestiaryDesc[e.kind] || '' : PD.text.bestiaryUnknown, 12));
     this.detail.setVisible(true);
     this.detailKind = e.kind;
   }
