@@ -423,11 +423,12 @@ window.PD = window.PD || {};
   };
   // 一起守護的第 6 關：敵人走得慢（×0.75），有錢就放的玩家幾乎必過，再多一點血（約再 +10～15%）
   const L6_ENEMIES_TOGETHER = Object.assign({}, L6_ENEMIES, {
-    scout: { secPerCell: 3.25, hp: 7 },
+    // 2026-11-11 緩和：真實點擊合理／一起守護第 6 關只 2/5 勝，往自己挑戰拉回約一半（理由見 CLAUDE.md「chunk B 平衡」）
+    scout: { secPerCell: 3.25, hp: 6 },
     tough: { secPerCell: 3.25, hp: 11 },
-    armored: { secPerCell: 5, hp: 19 },
-    flyer: { hp: 6 }, lobber: { hp: 10 }, phantom: { hp: 10 }, healer: { hp: 10 }, splitter: { hp: 12 }, bruiser: { hp: 32 },
-    boss: { hp: 85 }, finalBoss: { hp: 255 },
+    armored: { secPerCell: 5, hp: 18 },
+    flyer: { hp: 5 }, lobber: { hp: 9 }, phantom: { hp: 10 }, healer: { hp: 10 }, splitter: { hp: 12 }, bruiser: { hp: 30 },
+    boss: { hp: 80 }, finalBoss: { hp: 240 },
   });
 
   const levels = [
