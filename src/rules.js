@@ -3,8 +3,12 @@
 window.PD = window.PD || {};
 
 PD.BattleSim = class BattleSim {
-  constructor(config, levelIndex, modeId) {
+  // unitLevels：{ 角色種類: 等級 }（成長存檔，見 growth.js）；沒給就全部 Lv1（自動試玩的試算照舊）
+  constructor(config, levelIndex, modeId, unitLevels) {
     this.cfg = config;
+    this.unitLevels = unitLevels || {};
+    // 這一局放過場的種類（過關給經驗用）；「再試這一段」不清掉，「從頭再玩」才清掉
+    this.everPlaced = {};
     this.rules = config.rules;
     this.level = config.levels[levelIndex];
     this.mode = config.modes[modeId];
@@ -41,11 +45,12 @@ PD.BattleSim = class BattleSim {
     return {
       phase: 'prep', tick: 0, balls: this.tune.startBalls || this.rules.startBalls, nextId: 1,
       nextSpawn: 0, lastSnapWave: 0, rescues: 0, placeCd: 0, kills: 0,
-      waitingHint: false, hintLanes: [], skySeq: 0, units: [], enemies: [], orbs: [], zones: [], introduced: [], rallyEnd: 0, rallyFactor: 1,
+      waitingHint: false, hintLanes: [], skySeq: 0, placedCount: {}, units: [], enemies: [], orbs: [], zones: [], introduced: [], rallyEnd: 0, rallyFactor: 1,
     };
   }
 
   restart() {
+    this.everPlaced = {};
     this.state = this.freshState();
     this.snapshot = null;
     this.commands.length = 0;
@@ -63,6 +68,18 @@ PD.BattleSim = class BattleSim {
 
   isUnlocked(kind) {
     return this.cfg.debug.unlockAll || this.cfg.units[kind].unlock <= this.level.number;
+  }
+
+  levelOf(kind) {
+    const lv = this.unitLevels[kind];
+    return Number.isInteger(lv) && lv >= 1 ? Math.min(lv, this.cfg.growth.maxLevel) : 1;
+  }
+
+  // 過關時：這一局每一種角色放過幾隻（請回、被打倒也算；失敗後重試前放過的種類至少算 1 隻）
+  placedCounts() {
+    const out = {};
+    Object.keys(this.everPlaced).forEach((k) => { out[k] = Math.max(1, this.state.placedCount[k] || 0); });
+    return out;
   }
 
   isLaneOpen(lane) { return this.level.openLanes.indexOf(lane) !== -1; }
@@ -311,7 +328,8 @@ PD.BattleSim = class BattleSim {
   }
 
   strike(u, def, e, now) {
-    e.hp -= def.damage;
+    // 角色等級的攻擊加成記在角色身上（u.dmg）；攻擊可能有小數，扣完血取到兩位小數，避免浮點誤差多打一下
+    e.hp = Math.round((e.hp - (u.dmg || def.damage)) * 100) / 100;
     if (def.slow) {
       e.slowEnd = now + this.ticks(def.slow.seconds);
       e.slowFactor = def.slow.factor;
@@ -479,8 +497,8 @@ PD.BattleSim = class BattleSim {
         e.contact = 0;
         u.hp -= this.enemyDefs[e.kind].contactDamage || this.rules.enemyContactDamage;
         this.events.push({ type: 'unitHit', id: u.id });
-        const thorns = this.cfg.units[u.kind].thorns;
-        if (thorns) { e.hp -= thorns; this.events.push({ type: 'thorns', id: e.id }); }
+        const thorns = u.thorns || this.cfg.units[u.kind].thorns;
+        if (thorns) { e.hp = Math.round((e.hp - thorns) * 100) / 100; this.events.push({ type: 'thorns', id: e.id }); }
       }
     }
     for (let i = s.units.length - 1; i >= 0; i--) {
@@ -708,8 +726,15 @@ PD.BattleSim = class BattleSim {
     const def = this.cfg.units[cmd.kind];
     s.balls -= def.cost;
     s.placeCd = this.ticks(this.rules.placeCooldown);
+    // 成長：生命與攻擊照等級加成（基礎數字在 config.js 不動）；花費、產球、技能都不變
+    const lv = this.levelOf(cmd.kind);
+    const hp = PD.growthHp(def.hp, lv);
+    s.placedCount[cmd.kind] = (s.placedCount[cmd.kind] || 0) + 1;
+    this.everPlaced[cmd.kind] = true;
     const unit = {
-      id: s.nextId++, kind: cmd.kind, lane: cmd.lane, col: cmd.col, hp: def.hp, maxHp: def.hp,
+      id: s.nextId++, kind: cmd.kind, lane: cmd.lane, col: cmd.col, hp, maxHp: hp, lv,
+      dmg: def.damage ? PD.growthDamage(def.damage, lv) : 0,
+      thorns: def.thorns ? PD.growthDamage(def.thorns, lv) : 0,
       targetId: 0, fireTick: 0, secondTick: -1, secondTarget: 0, roundGate: 0,
       frenzyEnd: 0, cometAt: 0,
       // 每隻角色自己的技能冷卻：剛放下的都從半冷卻開始（請回再放下是新角色，也是半冷卻）

@@ -12,6 +12,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
   init(data) {
     this.modeId = data.mode || 'solo';
     this.levelIndex = data.level || 0;
+    this.withStory = !!data.story; // 從地圖點關卡或按「下一關」進來時，先講一小段故事
   }
 
   create() {
@@ -19,11 +20,14 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     const cfg = PD.config;
     this.cfg = cfg;
     this.L = cfg.layout;
-    this.sim = new PD.BattleSim(cfg, this.levelIndex, this.modeId);
+    // 角色等級（成長存檔，依模式分開）：放下時生命與攻擊照等級加成
+    this.sim = new PD.BattleSim(cfg, this.levelIndex, this.modeId, PD.Growth.levels(this.modeId));
     PD.Bestiary.enterLevel(this.sim.level.number); // 圖鑑：這一關已解鎖的好朋友算遇到
     this.fx = new PD.Fx(this, cfg);
     this.skillFx = new PD.SkillFx(this, cfg);
     this.overlay = new PD.Overlay(this, cfg);
+    this.growth = new PD.GrowthShow(this);
+    this.storyOpen = false;
     this.accum = 0;
     this.pausedBy = null;
     this.selected = null;
@@ -78,7 +82,25 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     });
     this.checkOrientation();
     this.refreshPrepHint();
-    this.queueFriendTips();
+    if (this.withStory) this.showStory();
+    else this.queueFriendTips();
+  }
+
+  // 進關前的小故事：一兩句、點「出發！」再進準備階段（之後才是新朋友／場地提示）
+  showStory() {
+    const n = this.sim.level.number;
+    const lines = PD.text.story[n];
+    if (!lines) { this.queueFriendTips(); return; }
+    this.storyOpen = true;
+    this.introKind = 'story'; // 自動試玩靠 introKind 知道畫面在等人按鈕
+    this.overlay.show(PD.text.levelLabel(n), lines.join('\n'), [{ label: PD.text.storyGo, fn: () => {
+      this.storyOpen = false;
+      this.introKind = '';
+      this.overlay.hide();
+      this.queueFriendTips();
+    } }]);
+    this.overlay.msg.setLineSpacing(10).setAlign('center');
+    PD.Sound.play('tip');
   }
 
   // ===== 座標換算 =====
@@ -188,8 +210,18 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
         coin.setVisible(false);
         lockImg = PD.img(this, cx, C.y + 46, 'lock').setDepth(403).setTint(0xf0f4f8);
       }
-      return { kind, rect: { x, y: C.y, w: C.w, h: C.h }, def, bg, pic, picY, name, badge, cost, coin, glow, cd, lockImg, unlocked, edge, plate, pressT: 0, canBuy: null };
+      // 等級徽章（右上角，不擋左上的價格徽章與下面的名字）；進化後頭像上加一層淡淡的光
+      const lvY = C.y + 19;
+      const lvBox = this.add.container(x + C.w - 25, lvY).setDepth(404).setVisible(unlocked);
+      const lvBg = this.add.graphics();
+      const lvText = PD.txt(this, 0, 0, '', 18, '#ffffff', 3);
+      lvBox.add([lvBg, lvText]);
+      const evoGlow = this.add.image(picX, picY, 'atlas', 'glow').setDepth(401).setBlendMode(Phaser.BlendModes.ADD)
+        .setScale(PD.TEX_SCALE * 1.5).setVisible(false);
+      return { kind, rect: { x, y: C.y, w: C.w, h: C.h }, def, bg, pic, picY, name, badge, cost, coin, glow, cd, lockImg, unlocked, edge, plate, pressT: 0, canBuy: null,
+        lvBox, lvBg, lvText, lvY, evoGlow, evoStage: 0 };
     });
+    this.refreshCardLevels();
     const B = this.L.recallBtn;
     const bx = B.x + B.w / 2;
     const by = B.y + B.h / 2;
@@ -343,7 +375,23 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
   }
 
   cardParts(card) {
-    return [card.glow, card.bg, card.edge, card.plate, card.pic, card.name, card.badge, card.coin, card.cost];
+    return [card.glow, card.bg, card.edge, card.plate, card.pic, card.evoGlow, card.name, card.badge, card.coin, card.cost, card.lvBox];
+  }
+
+  // 卡片上的等級徽章：一般藍底；第一次進化金底、第二次粉紫底（不只靠顏色：進化後頭像也會發光）
+  refreshCardLevels() {
+    this.cards.forEach((card) => {
+      if (!card.unlocked) return;
+      const lv = this.sim.levelOf(card.kind);
+      const stage = PD.evoStage(lv);
+      card.evoStage = stage;
+      card.lvText.setText(PD.text.lvLabel(lv)).setColor(stage ? '#3a2a10' : '#ffffff').setStroke(stage ? '#fff4dc' : '#1f2a38', stage ? 2 : 3);
+      const w = Math.max(42, card.lvText.width + 12);
+      const fill = stage >= 2 ? 0xffa8f0 : stage ? 0xffd84a : 0x3b6fb0;
+      card.lvBg.clear().fillStyle(0x1f2a38, 1).fillRoundedRect(-w / 2 - 2, -14, w + 4, 28, 10)
+        .fillStyle(fill, 1).fillRoundedRect(-w / 2, -12, w, 24, 8);
+      card.evoGlow.setVisible(stage > 0).setTint(stage >= 2 ? 0xffa8f0 : 0xffd84a);
+    });
   }
 
   // parts＝要提到暗幕上面的物件（提示關掉時放回原本的深度）；seconds＞0 表示沒有暗幕、幾秒後（真實時間）自己收起來
@@ -465,7 +513,11 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
       const flames = FLAME_SPOTS.map(() => PD.img(this, 0, 0, 'iconBurn').setOrigin(0.5, 1).setVisible(false));
       // 招式可以放時腳下一圈往外擴的光環（只有我方有技能的角色用）
       const skFoot = this.add.image(0, -2, 'atlas', 'ring').setBlendMode(Phaser.BlendModes.ADD).setVisible(false);
-      c.add([ready, skFoot, shadow, body, label, ...flames, hpBack, hpFill, burn, slow]);
+      // 進化的占位外觀（還沒有進化圖）：身後一團柔光、身上一層疊加的亮光（看起來更亮、更飽和）
+      const evoGlow = this.add.image(0, 0, 'atlas', 'glow').setBlendMode(Phaser.BlendModes.ADD).setVisible(false);
+      const evoRing = this.add.image(0, -2, 'atlas', 'ring').setBlendMode(Phaser.BlendModes.ADD).setVisible(false);
+      const evoShine = PD.img(this, 0, 0, 'white').setOrigin(0.5, 1).setBlendMode(Phaser.BlendModes.ADD).setVisible(false);
+      c.add([evoGlow, evoRing, ready, skFoot, shadow, body, evoShine, label, ...flames, hpBack, hpFill, burn, slow]);
       // 角色頭右上角的小招式圖示＋冷卻倒數圓環：另一層，畫在同路敵人上面，不會被走過來的敵人蓋住
       const top = this.add.container(0, 0).setDepth(95).setVisible(false);
       const skGlow = this.add.image(0, 0, 'atlas', 'glow').setBlendMode(Phaser.BlendModes.ADD);
@@ -474,7 +526,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
       const skRing = this.add.graphics();
       const skSecs = PD.txt(this, 0, 0, '', 17, '#ffffff', 4);
       top.add([skGlow, skBase, skArt, skRing, skSecs]);
-      v = { c, ready, shadow, body, label, flames, hpBack, hpFill, burn, slow, kindClass: 'actor',
+      v = { c, ready, shadow, body, label, flames, hpBack, hpFill, burn, slow, kindClass: 'actor', evoGlow, evoRing, evoShine,
         skFoot, top, skGlow, skBase, skArt, skRing, skSecs, ...PD.Anim.newSlots() };
     }
     v.shadowSX = PD.TEX_SCALE * (size.w * 1.15) / 96;
@@ -492,7 +544,11 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
       skillT: -1, skillKeys: null, readyOn: false, frenzyOn: false, slideT: 0, slideDx: 0, hopT: 0, hopDx: 0,
       hover: 0, hpWide: 1, hpTall: 1, cloakOn: false, aura: 0, shimmerT: 0,
       skState: '', skStep: -1, skShown: -1, skReadyAt: 0, skPop: 0, iconX: 0, iconY: 0,
+      evo: 1, evoStage: 0, evoSparkT: 0,
     });
+    v.evoGlow.setVisible(false);
+    v.evoRing.setVisible(false);
+    v.evoShine.setVisible(false);
     v.skFoot.setVisible(false);
     v.top.setVisible(false);
     v.ready.setVisible(false).setTint(0xffe9a0).setScale(PD.TEX_SCALE * (size.w / 48), PD.TEX_SCALE * 0.5);
@@ -544,6 +600,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     if (this.pausedBy) return;
     const dt = Math.min(delta, 100) / 1000;
     this.clock += dt;
+    this.growth.update(dt);
     // 跳出提示或結算時戰鬥已停，慶祝動畫維持正常速度
     const worldDt = dt * (this.overlay.visible ? 1 : this.gameSpeed);
     this.worldClock += worldDt;
@@ -772,13 +829,24 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     const mode = this.sim.mode;
     const stars = PD.levelStars(mode.rescues - this.sim.state.rescues, mode.rescues);
     const hadStars = PD.Progress.stars(this.modeId, this.sim.level.number);
+    // 重打判斷一定要在 markCleared 之前，否則第一次過關也會被當成重打
+    const replay = PD.Progress.isCleared(this.modeId, this.sim.level.number);
     const better = PD.Progress.markCleared(this.modeId, this.sim.level.number, stars);
     this.lastStars = stars;
+    // 成長：這一局放過場的每一種角色得到經驗（過關那一刻就存好），之後「再玩一次」用新的等級
+    this.lastGrowth = PD.Growth.award(this.modeId, this.sim.placedCounts(), replay);
+    this.sim.unitLevels = PD.Growth.levels(this.modeId);
+    this.refreshCardLevels(); // 成長／進化畫面底下的卡片列也要馬上是新等級
     const buttons = [];
     if (this.cfg.levels[this.levelIndex + 1]) buttons.push({ label: PD.text.nextLevel, fn: () => this.goLevel(this.levelIndex + 1) });
     buttons.push({ label: PD.text.backToMap, fn: () => this.goMap() });
     buttons.push({ label: PD.text.playAgain, fn: () => this.sim.restart() });
-    this.overlay.show(PD.text.winTitle, PD.text.winMsg, buttons, { stars, note: better && hadStars ? PD.text.starsBetter : '' });
+    const opts = { stars, note: better && hadStars ? PD.text.starsBetter : '' };
+    const final = () => { this.overlay.show(PD.text.winTitle, PD.text.winMsg, buttons, opts); this.refreshCardLevels(); };
+    const grew = this.lastGrowth.some((r) => r.gain > 0);
+    if (!grew) { final(); return; }
+    // 先是原本的星星畫面（按「繼續」），再演「大家長大了！」與進化，最後回到星星畫面和原本的按鈕
+    this.overlay.show(PD.text.winTitle, PD.text.winMsg, [{ label: PD.text.growthNext, fn: () => this.growth.start(this.lastGrowth, final) }], opts);
   }
 
   onFailed() {
@@ -795,7 +863,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
 
   goLevel(index) {
     PD.Sound.startMusic();
-    this.scene.start('Battle', { mode: this.modeId, level: index });
+    this.scene.start('Battle', { mode: this.modeId, level: index, story: true });
   }
 
   // 把狀態同步到畫面
@@ -854,8 +922,20 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     let v = this.viewById.get(u.id);
     const def = this.cfg.units[u.kind];
     if (!v) {
-      v = this.acquireActor(u.id, 'unit_' + u.kind, PD.names[u.kind], def.size, this.footY(u.lane), false);
+      // 進化後畫面放大（只是外觀；點擊與判定照舊看格子）。大小先放大再交給物件池，血條與招式圖示會跟著往上
+      const lv = u.lv || 1;
+      const evo = PD.evoScaleOf(u.kind, lv);
+      const size = evo === 1 ? def.size : { w: Math.round(def.size.w * evo), h: Math.round(def.size.h * evo) };
+      v = this.acquireActor(u.id, 'unit_' + u.kind, PD.names[u.kind], size, this.footY(u.lane), false);
       v.kind = u.kind;
+      v.evo = evo;
+      v.evoStage = PD.evoStage(lv);
+      if (v.evoStage) {
+        const tint = v.evoStage >= 2 ? 0xffa8f0 : 0xfff0a0;
+        v.evoGlow.setTint(tint).setPosition(0, -size.h * 0.5).setScale(PD.TEX_SCALE * size.w / 40, PD.TEX_SCALE * size.h / 46).setVisible(true);
+        v.evoRing.setTint(tint).setScale(PD.TEX_SCALE * size.w * (v.evoStage >= 2 ? 1.3 : 1.1) / 96, PD.TEX_SCALE * size.w * (v.evoStage >= 2 ? 0.4 : 0.34) / 96).setVisible(true);
+        v.evoShine.setVisible(true);
+      }
       if (this.textures.exists('art_' + u.kind)) v.label.setText(''); // 有貼圖就不在身上蓋字
       if (def.idleSheet && this.textures.exists('idle_' + u.kind)) {
         v.idleFrames = def.idleSheet.frames;
@@ -877,6 +957,7 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
     }
     this.animateActor(v, u.hp, u.maxHp, 0, style, this.chargeProgress(u, def, style));
     if (v.idleFrames) this.updateIdleFrame(v);
+    if (v.evoStage) this.updateEvo(v);
     this.updateReady(v, u);
   }
 
@@ -960,6 +1041,27 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
         v.skShown = n;
         v.skSecs.setText(String(n)).setVisible(n > 0);
         v.skArt.setVisible(n <= 0); // 有數字時數字放在灰色圖示中間，蓋住圖案比較好讀
+      }
+    }
+  }
+
+  // 進化的占位外觀：柔光慢慢呼吸、亮光疊在身上；第二次進化腳下多一圈光環、偶爾冒小亮點。
+  // 「減少特效」時不呼吸、不冒亮點，但仍然看得出比較大、有光
+  updateEvo(v) {
+    const reduced = this.fx.reduced;
+    const big = v.evoStage >= 2;
+    const breathe = reduced ? 0 : Math.sin(this.clock * Math.PI * 2 / 2.2 + v.seed);
+    v.evoGlow.setAlpha((big ? 0.55 : 0.48) + 0.1 * breathe);
+    v.evoRing.setAlpha(reduced ? 0.6 : (big ? 0.55 : 0.45) + 0.15 * breathe);
+    const b = v.body;
+    const sh = v.evoShine;
+    if (sh.frame.name !== b.frame.name) sh.setFrame(b.frame.name);
+    sh.setScale(b.scaleX, b.scaleY).setPosition(b.x, b.y).setRotation(b.rotation).setAlpha(big ? 0.22 : 0.15);
+    if (big && !reduced && !this.overlay.visible) {
+      v.evoSparkT -= this.frameDt;
+      if (v.evoSparkT <= 0) {
+        v.evoSparkT = 0.7 + (v.seed % 0.5);
+        this.fx.ambient('spark', v.c.x + (Math.random() - 0.5) * v.w, v.c.y - Math.random() * v.h, 0xffd6f6, 0, -30, 0, 0.5, 0.7, 0.1, 0.9);
       }
     }
   }
@@ -1165,7 +1267,8 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
         v.tintNow = tint;
       }
     }
-    v.body.setScale(PD.TEX_SCALE * sx, PD.TEX_SCALE * sy).setPosition(offX, offY).setRotation(rot);
+    const evo = v.evo || 1; // 進化後畫面放大（敵人一律 1）
+    v.body.setScale(PD.TEX_SCALE * sx * evo, PD.TEX_SCALE * sy * evo).setPosition(offX, offY).setRotation(rot);
     v.shadow.x = offX * 0.6;
     if (v.isEnemy) {
       // 跳起來時影子變小，看起來真的離地
@@ -1257,7 +1360,10 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
         card.badge.y = C.y + 25 + dy;
         card.coin.y = C.y + 25 + dy;
         card.cost.y = C.y + 25 + dy;
+        card.lvBox.y = card.lvY + dy;
+        card.evoGlow.y = card.picY + dy;
       }
+      if (card.evoStage) card.evoGlow.setAlpha(this.fx.reduced ? 0.3 : 0.24 + 0.1 * Math.sin(this.clock * Math.PI * 2 / 2.4));
     }
 
     const cellPulse = 0.26 + Math.sin(this.clock * 5) * 0.1;
@@ -1438,7 +1544,12 @@ PD.BattleScene = class BattleScene extends Phaser.Scene {
       if (this.pausedBy !== 'portrait') this.overlay.tap(x, y);
       return;
     }
-    if (this.overlay.visible) { this.overlay.tap(x, y); return; }
+    if (this.overlay.visible) {
+      // 成長動畫跑一半：點任何地方都直接跳到結果
+      if (this.growth.busy()) { PD.Sound.play('tap'); this.growth.finish(); return; }
+      this.overlay.tap(x, y);
+      return;
+    }
     if (this.tapOrb(x, y)) return;
     const L = this.L;
     for (let i = 0; i < this.pressables.length; i++) {

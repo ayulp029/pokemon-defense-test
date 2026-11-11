@@ -16,6 +16,7 @@ PD.MapScene = class MapScene extends Phaser.Scene {
 
     PD.txt(this, L.width / 2, 62, PD.text.mapTitle, 54, '#ffe9a8', 7);
     PD.txt(this, L.width / 2, 124, PD.text[this.modeId === 'together' ? 'modeTogether' : 'modeSolo'], 30);
+    this.drawGoal(L.width / 2, M.goalY);
 
     this.drawPath(M.nodes);
     const last = cfg.levels.length;
@@ -32,6 +33,29 @@ PD.MapScene = class MapScene extends Phaser.Scene {
     this.hint = PD.txt(this, L.width / 2, 760, '', 32);
     // 用 pointerdown：從戰鬥畫面按「回地圖」時手指還沒放開，不會誤觸地圖上的關卡
     this.input.on('pointerdown', (p) => this.onTap(p.x / PD.RES, p.y / PD.RES));
+  }
+
+  // 最終目標：「目標：打倒魔王○○！」加上還有幾關會遇到他（依這個模式的進度）。
+  // 放在模式名稱下面、關卡木牌上面，左右不碰「換模式」與「圖鑑」鈕
+  drawGoal(cx, y) {
+    const last = PD.config.levels.length;
+    const done = PD.Progress.cleared(this.modeId);
+    const left = last - (done + 1);
+    const sub = done >= last ? PD.text.goalDone : left <= 0 ? PD.text.goalHere : PD.text.goalLeft(left);
+    const g = this.add.graphics(); // 底牌先建立，字才會畫在底牌上面
+    const t1 = PD.txt(this, 0, y, PD.text.goalLine, 26, '#ffe9a8', 5).setOrigin(0, 0.5);
+    const t2 = PD.txt(this, 0, y, sub, 26, done >= last ? '#c9f5d0' : '#ffffff', 5).setOrigin(0, 0.5);
+    const gap = 22;
+    const flagW = 34;
+    const w = flagW + t1.width + gap + t2.width;
+    const x0 = cx - w / 2;
+    // 底牌：深色半透明圓角板，讓字在夜空與山上都清楚
+    g.fillStyle(0x0f1a24, 0.55).fillRoundedRect(x0 - 20, y - 22, w + 40, 44, 20);
+    g.lineStyle(2, 0xffe9a8, 0.45).strokeRoundedRect(x0 - 20, y - 22, w + 40, 44, 20);
+    this.drawFlag(g, x0 + 4, y + 14, 0.36);
+    t1.setX(x0 + flagW);
+    t2.setX(x0 + flagW + t1.width + gap);
+    this.goal = { line: t1, sub: t2, rect: { x: x0 - 20, y: y - 22, w: w + 40, h: 44 } }; // 測試檢查用
   }
 
   // 小路：深色外緣、淺色路面，中間一排小石頭
@@ -132,7 +156,19 @@ PD.MapScene = class MapScene extends Phaser.Scene {
   }
 
   // 最後一關的小隊旗：旗桿加三角旗，旗上是搗蛋團的歪菱形隊徽（不是文字或字母）
-  drawFlag(g, x, y) {
+  drawFlag(g, x, y, k) {
+    if (k && k !== 1) {
+      // 縮小版（目標列用）：用同一套形狀，按比例畫
+      const S = (v) => v * k;
+      g.fillStyle(0x1f2a38, 1).fillRect(x - S(3), y - S(74), Math.max(2, S(7)), S(86));
+      g.fillStyle(0x1f2a38, 1).fillTriangle(x + S(2), y - S(76), x + S(68), y - S(52), x + S(2), y - S(26));
+      g.fillStyle(0xff8e6e, 1).fillTriangle(x + S(4), y - S(71), x + S(60), y - S(52), x + S(4), y - S(31));
+      const cx = x + S(24);
+      const cy = y - S(51);
+      g.fillStyle(0xffe082, 1).fillPoints([{ x: cx, y: cy - S(8) }, { x: cx + S(7), y: cy - S(1) }, { x: cx + S(1), y: cy + S(8) }, { x: cx - S(7), y: cy + S(1) }], true);
+      g.fillStyle(0xffe082, 1).fillCircle(x + S(1), y - S(77), Math.max(2, S(5)));
+      return;
+    }
     g.fillStyle(0x1f2a38, 1).fillRect(x - 3, y - 74, 7, 86);
     g.fillStyle(0xd8d2e8, 1).fillRect(x - 1, y - 72, 3, 82);
     g.fillStyle(0x1f2a38, 1).fillTriangle(x + 2, y - 76, x + 68, y - 52, x + 2, y - 26);
@@ -163,6 +199,6 @@ PD.MapScene = class MapScene extends Phaser.Scene {
     if (!node.open) { this.hint.setText(PD.text.levelLocked); return; }
     PD.Sound.play('tap');
     PD.Sound.startMusic();
-    this.scene.start('Battle', { mode: this.modeId, level: node.level.number - 1 });
+    this.scene.start('Battle', { mode: this.modeId, level: node.level.number - 1, story: true });
   }
 };

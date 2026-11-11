@@ -169,6 +169,30 @@ window.PD = window.PD || {};
       boss: `${names.enemyTeam}的隊長，會叫小兵一起來玩。`,
       finalBoss: `${names.enemyTeam}的大隊長，敲鼓咚咚咚！`,
     },
+    // ===== 成長與進化（chunk A）：過關畫面、卡片徽章 =====
+    growthNext: '繼續',
+    growthTitle: '大家長大了！',
+    levelUp: '升級了！',
+    lvLabel: (n) => `Lv${n}`,
+    xpGain: (n) => `+${n}`,
+    growthMax: '最高級',
+    evolveTitle: (name) => `${name}進化了！`,
+    evolveMsg: '變得更大、更強了！',
+    // ===== 大地圖的最終目標 =====
+    goalLine: `目標：打倒魔王${names.finalBoss}！`,
+    goalLeft: (n) => `還有 ${n} 關就會遇到他`,
+    goalHere: '就是這一關！',
+    goalDone: '已經把魔王打回去了！',
+    // ===== 進關前的小故事（兩種模式同一組；一行一句，點一下繼續）=====
+    storyGo: '出發！',
+    story: {
+      1: [`${names.enemyTeam}來搶村莊了！`, `請${names.trainer}和${names.basicShooter}出來幫忙。`],
+      2: ['又來新朋友了。', '一起把村莊守住！'],
+      3: [`${names.enemyTeam}變多了。`, '新朋友會擋在前面。'],
+      4: [`有的${names.enemyTeam}會飛！`, '要請會射遠的朋友幫忙。'],
+      5: ['有的敵人會躲起來。', '離魔王更近了。'],
+      6: [`${names.finalBoss}要來了！`, '大家一起保護村莊。'],
+    },
   };
 
   // ===== 版面（基準畫面 1180×820）=====
@@ -204,6 +228,7 @@ window.PD = window.PD || {};
       nodes: [{ x: 210, y: 290 }, { x: 590, y: 290 }, { x: 970, y: 290 }, { x: 970, y: 570 }, { x: 590, y: 570 }, { x: 210, y: 570 }],
       nodeHit: 200,
       backBtn: { x: 20, y: 16, w: 170, h: 84 },
+      goalY: 161, // 最終目標那一行（模式名稱下面、關卡木牌上面）
       // 圖鑑鈕：右上角，和「換模式」同大小（1024×768 下約 148×73 點），不壓到圓鈕、木牌、小路與旗子
       bestiaryBtn: { x: 990, y: 16, w: 170, h: 84 },
     },
@@ -381,10 +406,29 @@ window.PD = window.PD || {};
   // 第 4 關起共用的敵人數值（和第 3 關同級）
   const LATE_ENEMIES = {
     scout: { secPerCell: 3.25, hp: 5 },
-    tough: { secPerCell: 3.25, hp: 8 },
+    tough: { secPerCell: 3.25, hp: 9 }, // chunk B：8→9（成長後進第 4、5 關約 Lv3～5）
     runner: { secPerCell: 2, hp: 5 },
-    armored: { secPerCell: 5, hp: 14 },
+    armored: { secPerCell: 5, hp: 16 }, // chunk B：14→16
   };
+
+  // 第 6 關（chunk B，2026-11-11）：有了成長，一路打上來進第 6 關時常用角色約 Lv5～6（攻血 +24～30%），
+  // 原本照全員 Lv1 調的血量太容易，敵人血量約 +25%、隊長與鼓鼓隊長也加血（舊值寫在 CLAUDE.md）
+  const L6_ENEMIES = {
+    scout: { secPerCell: 3.25, hp: 6 },
+    tough: { secPerCell: 3.25, hp: 10 },
+    runner: { secPerCell: 2, hp: 6 },
+    armored: { secPerCell: 5, hp: 17 },
+    flyer: { hp: 5 }, lobber: { hp: 9 }, phantom: { hp: 9 }, healer: { hp: 9 }, splitter: { hp: 11 }, bruiser: { hp: 28 },
+    boss: { hp: 75 }, finalBoss: { hp: 225 },
+  };
+  // 一起守護的第 6 關：敵人走得慢（×0.75），有錢就放的玩家幾乎必過，再多一點血（約再 +10～15%）
+  const L6_ENEMIES_TOGETHER = Object.assign({}, L6_ENEMIES, {
+    scout: { secPerCell: 3.25, hp: 7 },
+    tough: { secPerCell: 3.25, hp: 11 },
+    armored: { secPerCell: 5, hp: 19 },
+    flyer: { hp: 6 }, lobber: { hp: 10 }, phantom: { hp: 10 }, healer: { hp: 10 }, splitter: { hp: 12 }, bruiser: { hp: 32 },
+    boss: { hp: 85 }, finalBoss: { hp: 255 },
+  });
 
   const levels = [
     {
@@ -541,12 +585,12 @@ window.PD = window.PD || {};
         warm: '255,244,200', warmAlpha: 0.2, flower: 'flower', flowerChance: 0.3, decor: 'tent',
       },
       // 2026-11-10 宇鋒要求：收緊經濟（貪婪玩家不再鋪滿）、合理玩家自己挑戰約 60～80%。
-      // 擊倒每 3 隻才掉球（原 2）；隊長 80→60 血、鼓鼓隊長 260→180 血。
+      // 擊倒每 3 隻才掉球（原 2）；隊長 80→60 血、鼓鼓隊長 260→180 血（2026-11-11 chunk B 又依成長調高，見 L6_ENEMIES）。
       // 一起守護敵人走得慢、整局較長，收入另外拉長（天空與小勇 13 秒、每 4 隻掉球），不然貪婪玩家一樣會鋪滿
       tune: {
         skyOrbEvery: 12, genEvery: 12, killOrbEvery: 3,
-        enemies: Object.assign({}, LATE_ENEMIES, { boss: { hp: 60 }, finalBoss: { hp: 180 } }),
-        byMode: { together: { skyOrbEvery: 13, genEvery: 13, killOrbEvery: 4 } },
+        enemies: L6_ENEMIES,
+        byMode: { together: { skyOrbEvery: 13, genEvery: 13, killOrbEvery: 4, enemies: L6_ENEMIES_TOGETHER } },
       },
       script: makeScript([
         { at: 16, gap: 4.5, kinds: ['tough', 'flyer', 'scout', 'phantom', 'tough'] },
@@ -576,11 +620,59 @@ window.PD = window.PD || {};
     return Math.max(1, Math.min(3, n));
   };
 
+  // ===== 角色成長（chunk A，2026-11-11；建議值，孩子還沒試玩）=====
+  // 過關後，這一關「放過場」的每一種角色得到經驗（請回、被打倒也算）；依模式、依種類分開存（pd.growth.v1，見 growth.js）。
+  // xpTable[i]＝到達 Lv(i+1) 需要的累積經驗；Lv10 封頂。每關基礎 12 點，同一種多放一隻再 +1（最多 +4）。
+  // 每一級生命與攻擊 +6%（用基礎值算，不累乘）；只改生命、攻擊與大睡熊的反彈傷害，不改產球、花費、技能冷卻或技能威力。
+  // 進化（還沒有進化圖，先用占位外觀）：Lv3 第一次、Lv6 第二次；evoScale＝畫面放大倍率，
+  // fitW／fitH＝放大後不可超過的寬高（格子 96×144，不擋到隔壁格子），太大的角色（大睡熊）會按比例少放大一點。
+  const growth = {
+    maxLevel: 10,
+    xpTable: [0, 10, 22, 36, 52, 70, 90, 112, 136, 162],
+    xpPerClear: 12, xpPerExtra: 1, xpExtraMax: 4,
+    // 重打已經過關的關卡（同一模式）只拿這個比例的經驗（四捨五入、最少 1），避免反覆刷第 1 關就把等級刷滿
+    xpReplayFrac: 0.5,
+    statPerLevel: 0.06,
+    evolveAt: [3, 6],
+    evoScale: [1, 1.12, 1.22],
+    fitW: 94, fitH: 124,
+  };
+  const xpCap = () => growth.xpTable[growth.maxLevel - 1];
+  PD.growthLevelOf = function (xp) {
+    let lv = 1;
+    for (let i = 1; i < growth.maxLevel; i++) if (xp >= growth.xpTable[i]) lv = i + 1;
+    return lv;
+  };
+  // 生命用整數：round(base × (1 + 0.06 × (等級−1)))，最少 1
+  PD.growthHp = (base, lv) => Math.max(1, Math.round(base * (1 + growth.statPerLevel * (Math.max(1, lv) - 1))));
+  // 攻擊（與反彈傷害）留兩位小數：基礎攻擊多半是 1，取整數的話要到 Lv10 才會一口氣變 2，孩子感覺不到慢慢變強
+  PD.growthDamage = (base, lv) => Math.round(base * (1 + growth.statPerLevel * (Math.max(1, lv) - 1)) * 100) / 100;
+  // 0＝還沒進化、1＝第一次、2＝第二次
+  PD.evoStage = (lv) => growth.evolveAt.filter((n) => lv >= n).length;
+  // 場上畫面放大倍率（只是外觀）；太大的角色按比例少放大，放大後不超過 fitW×fitH
+  PD.evoScaleOf = function (kind, lv) {
+    const stage = PD.evoStage(lv);
+    if (!stage) return 1;
+    const size = units[kind].size;
+    const top = growth.evoScale[growth.evoScale.length - 1];
+    const room = Math.min(top, growth.fitW / size.w, growth.fitH / size.h);
+    const f = Math.max(0, Math.min(1, (room - 1) / (top - 1)));
+    return 1 + (growth.evoScale[stage] - 1) * f;
+  };
+  // 這一關得到的經驗：放過場才有；同一種多放幾隻多一點點
+  // replay＝這一關這個模式之前已經過關（重打），經驗打折（xpReplayFrac）
+  PD.growthXpFor = function (count, replay) {
+    if (!(count > 0)) return 0;
+    const full = growth.xpPerClear + Math.min(growth.xpExtraMax, (count - 1) * growth.xpPerExtra);
+    return replay ? Math.max(1, Math.round(full * growth.xpReplayFrac)) : full;
+  };
+  PD.growthXpCap = xpCap;
+
   PD.names = names;
   PD.makeScript = makeScript; // 自動試玩試算不同的波次時也用同一套排路線的規則
   PD.text = text;
   PD.config = {
-    layout, units, cardOrder, enemies, levels, modes, skills, terrainTypes,
+    layout, units, cardOrder, enemies, levels, modes, skills, terrainTypes, growth,
     speedSteps: [1, 2, 3], // 速度鈕循環的倍率
     rules: {
       tickSeconds: 0.05,
